@@ -6,6 +6,7 @@
     "dev":        "next dev",
     "build":      "next build",
     "start":      "next start",
+    "postinstall": "prisma generate",
     "test":       "jest",
     "test:watch": "jest --watch",
     "db:migrate": "prisma migrate dev",

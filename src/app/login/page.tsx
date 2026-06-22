@@ -71,9 +71,6 @@ export default function LoginPage() {
           </button>
         </form>
 
-        <p className="text-center text-xs text-gray-400 mt-4">
-          Demo: admin@turnyras.lt / admin123
-        </p>
         <div className="mt-5 border-t border-gray-200 pt-5 text-center">
           <Link href="/watch" className="inline-flex min-h-10 items-center justify-center px-4 text-sm font-medium text-gray-700 hover:text-gray-950">
             Stebėti turnyrą →
