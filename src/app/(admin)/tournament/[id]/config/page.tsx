@@ -1,14 +1,9 @@
 import { prisma } from '@/lib/prisma'
 import { notFound } from 'next/navigation'
 import ConfigClient from '@/components/admin/ConfigClient'
+import { timeOnlyString, timeStringInZone } from '@/lib/timezone'
 
 export const dynamic = 'force-dynamic'
-
-function timeString(d: Date | string | null | undefined, fallback: string) {
-  if (!d) return fallback
-  const date = new Date(d)
-  return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`
-}
 
 export default async function ConfigPage({ params }: { params: { id: string } }) {
   const t = await prisma.tournament.findUnique({
@@ -35,7 +30,7 @@ export default async function ConfigPage({ params }: { params: { id: string } })
     groupTimeMinutes: String(c?.groupTimeMinutes ?? 45),
     groupCourts: String(c?.groupCourts ?? 4),
     groupPointSystem: c?.groupPointSystem ?? 'TWO_ONE',
-    groupStartsAt: timeString(c?.groupStartsAt, '09:00'),
+    groupStartsAt: timeOnlyString(c?.groupStartsAt, '09:00'),
     groupBreakMinutes: String(c?.groupBreakMinutes ?? 10),
     drawMethod: c?.drawMethod ?? 'SEEDED_RANDOM',
     clubRule: c?.clubRule ?? true,
@@ -46,7 +41,7 @@ export default async function ConfigPage({ params }: { params: { id: string } })
     knockoutTimeMinutes: String(c?.knockoutTimeMinutes ?? 60),
     knockoutCourts: String(c?.knockoutCourts ?? 2),
     thirdPlaceMatch: c?.thirdPlaceMatch ?? true,
-    knockoutStartsAt: timeString(c?.knockoutStartsAt, '15:00'),
+    knockoutStartsAt: timeStringInZone(c?.knockoutStartsAt, '15:00'),
   }
 
   return (

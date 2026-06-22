@@ -1,5 +1,6 @@
 'use client'
 import { useState, useEffect } from 'react'
+import { timeOnlyString } from '@/lib/timezone'
 
 export default function ScheduleClient({ tournamentId, config, initialMatches, startsAt, initialGroup = 'all', initialCourt = 'all' }:
   { tournamentId:string; config:any; initialMatches:any[]; startsAt:string; initialGroup?: string; initialCourt?: string }) {
@@ -10,9 +11,7 @@ export default function ScheduleClient({ tournamentId, config, initialMatches, s
   const configTime = (() => {
     try {
       if (!config?.groupStartsAt) return '09:00'
-      const d = new Date(config.groupStartsAt)
-      if (isNaN(d.getTime())) return '09:00'
-      return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`
+      return timeOnlyString(config.groupStartsAt, '09:00')
     } catch { return '09:00' }
   })()
   const [startTime, setStartTime] = useState<string>(configTime)

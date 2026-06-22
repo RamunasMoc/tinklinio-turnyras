@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getParam, requireAuth } from '@/lib/middleware/auth'
+import { combineDateAndTimeInZone } from '@/lib/timezone'
 
 const ROUND_WAVE_16: Record<string, number> = {
   LL:      0,
@@ -83,9 +84,11 @@ async function getAutoStartTime(tournamentId: string, fallbackDate: Date) {
     return roundToQuarterHour(end)
   }
 
-  const fallback = new Date(tournament?.startsAt ?? fallbackDate)
-  fallback.setHours(15, 0, 0, 0)
-  return fallback
+  if (tournament?.config?.knockoutStartsAt) {
+    return new Date(tournament.config.knockoutStartsAt)
+  }
+
+  return combineDateAndTimeInZone(tournament?.startsAt ?? fallbackDate, '15:00')
 }
 
 export async function POST(req: NextRequest, ctx: any) {

@@ -2,6 +2,7 @@
 import { useState }            from 'react'
 import { useRouter }           from 'next/navigation'
 import Link                    from 'next/link'
+import { combineDateAndTimeInZone } from '@/lib/timezone'
 
 type ConfigForm = {
   numGroups:string; advancePerGroup:string; advanceTotal:string; advanceMode:string; groupSetFormat:string; groupTiebreakPoints:string
@@ -76,11 +77,7 @@ export default function ConfigClient({
         thirdPlaceMatch: form.thirdPlaceMatch,
         knockoutStartsAt: (() => {
           if (!form.knockoutStartsAt) return null
-          // Sujungti turnyro datą su nurodytu laiku
-          const [h, m] = form.knockoutStartsAt.split(':').map(Number)
-          const dt = new Date(tournamentDate)
-          dt.setHours(h, m, 0, 0)
-          return dt.toISOString()
+          return combineDateAndTimeInZone(tournamentDate, form.knockoutStartsAt).toISOString()
         })(),
         lunchBreakMinutes: null,
       }),

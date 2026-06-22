@@ -1,4 +1,5 @@
 import { prisma } from '../prisma'
+import { combineDateAndTimeInZone, timeOnlyString } from '../timezone'
 
 export async function generateGroupSchedule(tournamentId: string) {
   const tournament = await prisma.tournament.findUnique({
@@ -16,14 +17,10 @@ export async function generateGroupSchedule(tournamentId: string) {
   const courts  = cfg.groupCourts
   // Naudoti groupStartsAt jei nustatytas, kitaip tournament.startsAt
   const startDate = cfg.groupStartsAt
-    ? (() => {
-        const base = new Date(tournament.startsAt)
-        const t    = new Date(cfg.groupStartsAt)
-        // Naudoti getHours() (lokalus laikas), ne getUTCHours()
-        // nes laikas saugomas kaip '1970-01-01THH:MM' lokaliu laiku
-        base.setHours(t.getHours(), t.getMinutes(), 0, 0)
-        return base
-      })()
+    ? combineDateAndTimeInZone(
+        tournament.startsAt,
+        timeOnlyString(cfg.groupStartsAt, '09:00'),
+      )
     : tournament.startsAt
   const start = startDate.getTime()
 
