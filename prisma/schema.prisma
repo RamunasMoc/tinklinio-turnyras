@@ -1,0 +1,312 @@
+// ============================================================
+// Paplūdimio tinklinio turnyro sistema — Prisma schema
+// ============================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────
+// ENUMS
+// ─────────────────────────────────────────
+
+enum Category {
+  M  // Vyrai
+  W  // Moterys
+  X  // Mix
+}
+
+enum AgeGroup {
+  U18
+  U21
+  U23
+  OPEN
+  PLUS40
+  PLUS50
+  PLUS100
+}
+
+enum SetFormat {
+  BO2_21  // Best of 2, iki 21
+  BO2_15  // Best of 2, iki 15
+  ONE_21  // 1 setas, iki 21
+  ONE_15  // 1 setas, iki 15
+}
+
+enum TiebreakPoints {
+  ELEVEN  // 11
+  FIFTEEN // 15
+}
+
+enum DrawMethod {
+  RANDOM          // Burtų tvarka
+  SEEDED_RANDOM   // Reitinguotos + burtai
+  SNAKE           // Serpentinas
+  MANUAL          // Rankinis
+}
+
+enum KnockoutFormat {
+  SINGLE_ELIMINATION
+  LUCKY_LOSER
+  DOUBLE_ELIMINATION
+  ROUND_ROBIN
+}
+
+enum PointSystem {
+  WIN_LOSS        // Tik pergalė/pralaimėjimas
+  TWO_ONE         // 2 t. laimėjimas / 1 t. pralaimėjimas
+  SET_RATIO       // Setų santykis
+}
+
+enum TournamentStatus {
+  DRAFT       // Kuriamas
+  OPEN        // Registracija atidaryta
+  CLOSED      // Registracija uždaryta
+  GROUPS      // Vyksta grupių etapas
+  KNOCKOUT    // Vyksta atkrintamosios
+  FINISHED    // Baigtas
+}
+
+enum MatchStatus {
+  SCHEDULED
+  IN_PROGRESS
+  FINISHED
+  WALKOVER    // Techninis pralaimėjimas
+}
+
+// ─────────────────────────────────────────
+// TURNYRAS
+// ─────────────────────────────────────────
+
+model Tournament {
+  id          String            @id @default(cuid())
+  name        String
+  organizer   String?
+  location    String?
+  startsAt    DateTime
+  category    Category
+  ageGroup    AgeGroup?
+  status      TournamentStatus  @default(DRAFT)
+  config      TournamentConfig?
+  groups      Group[]
+  teams       TournamentTeam[]
+  matches     Match[]
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  @@map("tournaments")
+}
+
+// ─────────────────────────────────────────
+// TURNYRO KONFIGŪRACIJA
+// ─────────────────────────────────────────
+
+model TournamentConfig {
+  id                    String          @id @default(cuid())
+  tournament            Tournament      @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  tournamentId          String          @unique
+
+  // Grupių etapas
+  numGroups             Int             @default(4)
+  advancePerGroup       Int             @default(2)   // garantuojamas skaičius iš kiekvienos grupės
+  advanceTotal          Int             @default(8)   // bendras skaičius (jei advanceMode='total')
+  advanceMode           String          @default("fixed")  // 'fixed' | 'total'
+  groupSetFormat        SetFormat       @default(BO2_21)
+  groupTiebreakPoints   Int             @default(15)  // 11 arba 15
+  groupTimeMinutes      Int             @default(45)
+  groupCourts           Int             @default(4)
+  groupPointSystem      PointSystem     @default(TWO_ONE)
+  groupBreakMinutes     Int             @default(10)
+  drawMethod            DrawMethod      @default(RANDOM)
+  numSeeds              Int             @default(0)
+  clubRule              Boolean         @default(false)
+
+  // Atkrintamosios
+  knockoutFormat        KnockoutFormat  @default(SINGLE_ELIMINATION)
+  knockoutSetFormat     SetFormat       @default(BO2_21)
+  knockoutTiebreakPoints Int            @default(15)
+  finalSetFormat        SetFormat       @default(BO2_21)
+  knockoutTimeMinutes   Int             @default(60)
+  knockoutCourts        Int             @default(2)
+  thirdPlaceMatch       Boolean         @default(true)
+
+  // Tvarkaraštis
+  knockoutStartsAt      DateTime?
+  groupStartsAt         DateTime?        // grupių etapo pradžios laikas
+  lunchBreakMinutes     Int?
+  lunchBreakAt          DateTime?
+
+  @@map("tournament_configs")
+}
+
+// ─────────────────────────────────────────
+// KOMANDA (registruota į turnyras)
+// ─────────────────────────────────────────
+
+model TournamentTeam {
+  id           String      @id @default(cuid())
+  tournament   Tournament  @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  tournamentId String
+  team         Team        @relation(fields: [teamId], references: [id])
+  teamId       String
+  seeded       Boolean     @default(false)
+  seedRank     Int?        // 1 = aukščiausia sėjamoji
+  registeredAt DateTime    @default(now())
+  group        Group?      @relation(fields: [groupId], references: [id])
+  groupId      String?
+
+  // Grupių etapo statistika
+  groupWins    Int         @default(0)
+  groupLosses  Int         @default(0)
+  groupPoints  Int         @default(0)  // pagal taškų sistemą
+  groupSetsWon Int         @default(0)
+  groupSetsLost Int        @default(0)
+  groupPtsWon  Int         @default(0)
+  groupPtsLost Int         @default(0)
+
+  matchesHome  Match[]     @relation("MatchHome")
+  matchesAway  Match[]     @relation("MatchAway")
+
+  @@unique([tournamentId, teamId])
+  @@map("tournament_teams")
+}
+
+// ─────────────────────────────────────────
+// KOMANDA (bazinis modelis, gali dalyvauti daugelyje turnyra)
+// ─────────────────────────────────────────
+
+model Team {
+  id          String           @id @default(cuid())
+  name        String
+  club        String?
+  category    Category?
+  rating      Int?             // ELO arba kitas reitingas
+  teamAge     Int?             // bendras komandos amžius (abiejų žaidėjų suma)
+  players     Player[]
+  tournaments TournamentTeam[]
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  @@map("teams")
+}
+
+// ─────────────────────────────────────────
+// ŽAIDĖJAS
+// ─────────────────────────────────────────
+
+model Player {
+  id          String    @id @default(cuid())
+  team        Team      @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  teamId      String
+  firstName   String
+  lastName    String
+  dateOfBirth DateTime? // tikslus amžius
+  ageYears    Int?      // apytikslis amžius, jei datos nėra
+  shirtSize   String?   // XS, S, M, L, XL, XXL
+  // ageYears skaičiuojamas query metu iš dateOfBirth, jei yra
+  // Jei dateOfBirth null ir ageYears null — amžius nežinomas
+  playerOrder Int       @default(1)  // 1 arba 2 komandoje
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@map("players")
+}
+
+// ─────────────────────────────────────────
+// GRUPĖ
+// ─────────────────────────────────────────
+
+model Group {
+  id           String           @id @default(cuid())
+  tournament   Tournament       @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  tournamentId String
+  name         String           // "A", "B", "C" ...
+  order        Int              // rodymo eilė
+  maxTeams     Int
+  advanceCount Int              @default(2)  // kiek komandų patenka toliau
+  teams        TournamentTeam[]
+  matches      Match[]
+
+  @@unique([tournamentId, name])
+  @@map("groups")
+}
+
+// ─────────────────────────────────────────
+// RUNGTYNĖS
+// ─────────────────────────────────────────
+
+model Match {
+  id           String         @id @default(cuid())
+  tournament   Tournament     @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  tournamentId String
+
+  // Grupių arba atkrintamosios
+  group        Group?         @relation(fields: [groupId], references: [id])
+  groupId      String?
+  round        String?        // "R16", "QF", "SF", "F", "3rd"
+  matchNumber  Int?
+  matchOrder   Int?      // Globalus mačo eilės numeris atkrintamosiose           // eilė dienos programoje
+
+  homeTeam     TournamentTeam? @relation("MatchHome", fields: [homeTeamId], references: [id])
+  homeTeamId   String?
+  awayTeam     TournamentTeam? @relation("MatchAway", fields: [awayTeamId], references: [id])
+  awayTeamId   String?
+
+  court        Int?           // aikštelės numeris
+  scheduledAt  DateTime?
+  startedAt    DateTime?
+  finishedAt   DateTime?
+  status       MatchStatus    @default(SCHEDULED)
+
+  sets         Set[]
+
+  // Galutinis rezultatas (skaičiuojamas iš sets)
+  homeSets     Int?
+  awaySets     Int?
+  winnerId     String?        // TournamentTeam id
+
+  @@map("matches")
+}
+
+// ─────────────────────────────────────────
+// SETAS
+// ─────────────────────────────────────────
+
+model Set {
+  id        String  @id @default(cuid())
+  match     Match   @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  matchId   String
+  setNumber Int     // 1, 2, 3 (tiebreak)
+  homeScore Int     @default(0)
+  awayScore Int     @default(0)
+  isTiebreak Boolean @default(false)
+
+  @@unique([matchId, setNumber])
+  @@map("sets")
+}
+
+// ─────────────────────────────────────────
+// VARTOTOJAS
+// ─────────────────────────────────────────
+
+enum UserRole {
+  ADMIN
+  REFEREE
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String?
+  passwordHash String
+  role         UserRole @default(REFEREE)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@map("users")
+}
