@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { advanceLoser, advanceStructuralByes, advanceWinner, assignMatchOrder, ensureDoubleElimFinalRounds, repairInitialLoserRound } from '@/lib/bracket'
 import { getParam, requireAuth } from '@/lib/middleware/auth'
 import { recalcGroupStandings, winnerFromSets } from '@/lib/tournament/standings'
+import { normalizeKOWinnerMode, rankedHomeWinsFromSeeds } from '@/lib/tournament/resultGeneration'
 
 type SetData = { setNumber: number; homeScore: number; awayScore: number; isTiebreak: boolean }
 
@@ -108,8 +109,7 @@ async function rankedHomeWins(matchId: string) {
   })
   const homeSeed = match?.homeTeam?.seedRank
   const awaySeed = match?.awayTeam?.seedRank
-  if (homeSeed == null || awaySeed == null || homeSeed === awaySeed) return undefined
-  return homeSeed < awaySeed
+  return rankedHomeWinsFromSeeds(homeSeed, awaySeed)
 }
 
 async function saveSets(matchId: string, sets: SetData[]) {
@@ -162,6 +162,7 @@ export async function POST(req: NextRequest, ctx: any) {
   const form = await req.formData()
   const action = String(form.get('action') ?? '')
   const isKO = form.get('isKO') === 'true'
+  const winnerMode = normalizeKOWinnerMode(form.get('winnerMode'))
   const redirectTo = new URL(`/tournament/${tournamentId}/${isKO ? 'knockout-results' : 'results'}`, req.url)
 
   const tournament = await prisma.tournament.findUnique({
@@ -175,7 +176,10 @@ export async function POST(req: NextRequest, ctx: any) {
 
   if (action === 'randomOne') {
     const matchId = String(form.get('matchId') ?? '')
-    if (matchId) await saveSets(matchId, randomSets(format, tbPts, isKO ? await rankedHomeWins(matchId) : undefined))
+    if (matchId) {
+      const forceHomeWins = isKO && winnerMode === 'ranked' ? await rankedHomeWins(matchId) : undefined
+      await saveSets(matchId, randomSets(format, tbPts, forceHomeWins))
+    }
     return NextResponse.redirect(redirectTo)
   }
 
@@ -223,7 +227,10 @@ export async function POST(req: NextRequest, ctx: any) {
 
         const minWave = roundWaveValue(fillable[0].round, roundWave)
         const waveMatches = fillable.filter(m => roundWaveValue(m.round, roundWave) === minWave)
-        for (const match of waveMatches) await saveSets(match.id, randomSets(format, tbPts, await rankedHomeWins(match.id)))
+        for (const match of waveMatches) {
+          const forceHomeWins = winnerMode === 'ranked' ? await rankedHomeWins(match.id) : undefined
+          await saveSets(match.id, randomSets(format, tbPts, forceHomeWins))
+        }
       }
     } else {
       const pending = await prisma.match.findMany({

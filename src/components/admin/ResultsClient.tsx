@@ -1,6 +1,7 @@
 'use client'
 import { useRouter } from 'next/navigation'
 import { useState, useEffect } from 'react'
+import { KOWinnerMode, rankedHomeWinsFromSeeds } from '@/lib/tournament/resultGeneration'
 
 type SetData = { setNumber:number; homeScore:number; awayScore:number; isTiebreak:boolean }
 type Match   = {
@@ -73,11 +74,7 @@ function generateRandomSets(format: string, tbPts: number, forceHomeWins?: boole
 }
 
 function rankedHomeWins(match: Match): boolean | undefined {
-  const homeSeed = match.homeTeam?.seedRank
-  const awaySeed = match.awayTeam?.seedRank
-  if (homeSeed == null || awaySeed == null) return undefined
-  if (homeSeed === awaySeed) return undefined
-  return homeSeed < awaySeed
+  return rankedHomeWinsFromSeeds(match.homeTeam?.seedRank, match.awayTeam?.seedRank)
 }
 
 function realKOMatches(matches: Match[]) {
@@ -143,9 +140,25 @@ export default function ResultsClient({ tournamentId, initialMatches, setFormat,
   const [groupF,  setGroupF]  = useState('all')
   const [teamF,   setTeamF]   = useState('all')
   const [valErr,  setValErr]  = useState('')
+  const [koWinnerMode, setKoWinnerMode] = useState<KOWinnerMode>('ranked')
 
   const router = useRouter()
   const isKO = isKOProp ?? (initialMatches.length > 0 && initialMatches.every(m => !(m as any).group))
+
+  useEffect(() => {
+    if (!isKO) return
+    const saved = window.localStorage.getItem(`ko-winner-mode:${tournamentId}`)
+    if (saved === 'ranked' || saved === 'random') setKoWinnerMode(saved)
+  }, [isKO, tournamentId])
+
+  function chooseKOWinnerMode(mode: KOWinnerMode) {
+    setKoWinnerMode(mode)
+    window.localStorage.setItem(`ko-winner-mode:${tournamentId}`, mode)
+  }
+
+  function koWinnerPreference(match: Match) {
+    return koWinnerMode === 'ranked' ? rankedHomeWins(match) : undefined
+  }
 
   // Užkrauti šviežius duomenis iš karto kai komponentas montuojasi
   useEffect(() => {
@@ -346,7 +359,7 @@ export default function ResultsClient({ tournamentId, initialMatches, setFormat,
 
   // Užpildyti vienas rungtynes atsitiktinai
   async function fillOneRandom(match: Match) {
-    const randomSets = generateRandomSets(setFormat, tbPoints, isKO ? rankedHomeWins(match) : undefined)
+    const randomSets = generateRandomSets(setFormat, tbPoints, isKO ? koWinnerPreference(match) : undefined)
     const res  = await fetch(`/api/tournaments/${tournamentId}/matches/${match.id}/sets`, {
       method:'PUT', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({ sets: randomSets }),
@@ -391,7 +404,12 @@ export default function ResultsClient({ tournamentId, initialMatches, setFormat,
   }
 
   async function fillAllRandom() {
-    if (!confirm(`Užpildyti ${randomFillCount} likusias rungtynes atsitiktiniais rezultatais?`)) return
+    const modeLabel = isKO
+      ? koWinnerMode === 'ranked'
+        ? 'Laimės aukštesnio reitingo komandos.'
+        : 'Laimėtojai bus parinkti visiškai atsitiktinai.'
+      : ''
+    if (!confirm(`Užpildyti ${randomFillCount} likusias rungtynes atsitiktiniais rezultatais?${modeLabel ? `\n\n${modeLabel}` : ''}`)) return
     setFilling(true)
 
     // KO atveju: pildyti raundas po raundo, po kiekvieno raundo
@@ -436,7 +454,7 @@ export default function ResultsClient({ tournamentId, initialMatches, setFormat,
         const waveMathces = fillable.filter(m => freshWaveOf(m.round) === minWave)
 
         for (const match of waveMathces) {
-          const randomSets = generateRandomSets(setFormat, tbPoints, rankedHomeWins(match as Match))
+          const randomSets = generateRandomSets(setFormat, tbPoints, koWinnerPreference(match as Match))
           await fetch(`/api/tournaments/${tournamentId}/matches/${match.id}/sets`, {
             method:'PUT', headers:{'Content-Type':'application/json'},
             body: JSON.stringify({ sets: randomSets }),
@@ -478,6 +496,30 @@ export default function ResultsClient({ tournamentId, initialMatches, setFormat,
 
   return (
     <div>
+      {isKO && (
+        <div className="mb-4 border border-gray-200 bg-white p-4">
+          <div className="mb-2 text-sm font-medium text-gray-700">Automatinio generavimo nugalėtojas</div>
+          <div className="inline-flex rounded-lg bg-gray-100 p-1" role="group" aria-label="KO nugalėtojo parinkimo režimas">
+            <button
+              type="button"
+              onClick={() => chooseKOWinnerMode('ranked')}
+              aria-pressed={koWinnerMode === 'ranked'}
+              className={`px-3 py-2 text-sm font-medium rounded-md transition-colors ${koWinnerMode === 'ranked' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-800'}`}
+            >
+              Pagal reitingą
+            </button>
+            <button
+              type="button"
+              onClick={() => chooseKOWinnerMode('random')}
+              aria-pressed={koWinnerMode === 'random'}
+              className={`px-3 py-2 text-sm font-medium rounded-md transition-colors ${koWinnerMode === 'random' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-800'}`}
+            >
+              Visiškai atsitiktinai
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="flex items-center justify-between mb-4">
         <h1 className="text-xl font-semibold text-gray-900">Rezultatai</h1>
         {fillablePending.length > 0 && (
@@ -492,6 +534,7 @@ export default function ResultsClient({ tournamentId, initialMatches, setFormat,
             }}>
             <input type="hidden" name="action" value="randomAll" />
             <input type="hidden" name="isKO" value={isKO ? 'true' : 'false'} />
+            {isKO && <input type="hidden" name="winnerMode" value={koWinnerMode} />}
             <button type="submit" disabled={filling}
               className="px-4 py-2 bg-amber-500 text-white rounded-lg text-sm font-medium hover:bg-amber-600 disabled:opacity-50 flex items-center gap-2">
               {filling ? <><span className="animate-spin inline-block">⟳</span> Užpildoma...</> : <>🎲 Užpildyti atsitiktinai ({randomFillCount})</>}
@@ -704,6 +747,7 @@ export default function ResultsClient({ tournamentId, initialMatches, setFormat,
                       <input type="hidden" name="action" value="randomOne" />
                       <input type="hidden" name="isKO" value={isKO ? 'true' : 'false'} />
                       <input type="hidden" name="matchId" value={m.id} />
+                      {isKO && <input type="hidden" name="winnerMode" value={koWinnerMode} />}
                       <button
                         type="submit"
                         onClick={e => e.stopPropagation()}
