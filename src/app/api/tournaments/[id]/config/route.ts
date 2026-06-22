@@ -2,6 +2,7 @@ import { NextRequest }           from 'next/server'
 import { prisma }                from '@/lib/prisma'
 import { withAuth, jsonOk, jsonErr, getParam } from '@/lib/middleware/auth'
 import { z }                     from 'zod'
+import { timeOnlyDate }          from '@/lib/timezone'
 
 const ConfigSchema = z.object({
   numGroups:              z.number().int().min(1).max(32),
@@ -48,12 +49,12 @@ export const PUT = withAuth(async (req: NextRequest, ctx: any) => {
     create: {
       tournamentId: id, ...d,
       knockoutStartsAt: d.knockoutStartsAt ? new Date(d.knockoutStartsAt) : null,
-      groupStartsAt:   d.groupStartsAt    ? new Date(`1970-01-01T${d.groupStartsAt}:00`) : null,
+      groupStartsAt:   d.groupStartsAt    ? timeOnlyDate(d.groupStartsAt) : null,
     },
     update: {
       ...d,
       knockoutStartsAt: d.knockoutStartsAt ? new Date(d.knockoutStartsAt) : null,
-      groupStartsAt:   d.groupStartsAt    ? new Date(`1970-01-01T${d.groupStartsAt}:00`) : null,
+      groupStartsAt:   d.groupStartsAt    ? timeOnlyDate(d.groupStartsAt) : null,
     },
   })
   return jsonOk(cfg)

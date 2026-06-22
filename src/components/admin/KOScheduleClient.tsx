@@ -1,4 +1,5 @@
 'use client'
+import { combineDateAndTimeInZone } from '@/lib/timezone'
 import React, { useState } from 'react'
 
 const ROUND_LBL: Record<string, string> = {
@@ -199,10 +200,7 @@ export default function KOScheduleClient({ tournamentId, config, initialMatches,
 
   async function getStartTime(): Promise<Date> {
     if (koMode === 'manual') {
-      const base = new Date(startsAt)
-      const [h, m] = koTimeStr.split(':').map(Number)
-      base.setHours(h, m, 0, 0)
-      return base
+      return combineDateAndTimeInZone(startsAt, koTimeStr)
     }
     try {
       const res  = await fetch(`/api/tournaments/${tournamentId}/schedule`)

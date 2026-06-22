@@ -2,6 +2,7 @@ import { NextRequest }           from 'next/server'
 import { prisma }                from '@/lib/prisma'
 import { withAuth, jsonOk, getParam } from '@/lib/middleware/auth'
 import { generateGroupSchedule } from '@/lib/tournament/schedule'
+import { timeOnlyDate }           from '@/lib/timezone'
 
 export async function GET(_req: NextRequest, ctx: any) {
   const tournamentId = getParam(ctx, 'id')
@@ -27,13 +28,10 @@ export const POST = withAuth(async (req: NextRequest, ctx: any) => {
 
   // Jei UI perduoda rankinį pradžios laiką — išsaugoti į config
   if (body.startTime) {
-    // Saugoti laiką kaip '1970-01-01THH:MM:00' lokaliu laiku (ne UTC)
-    // kad išvengti timezone problemų
-    const timeStr = `1970-01-01T${body.startTime}:00`
     await prisma.tournamentConfig.upsert({
       where:  { tournamentId },
-      update: { groupStartsAt: new Date(timeStr) },
-      create: { tournamentId, groupStartsAt: new Date(timeStr) },
+      update: { groupStartsAt: timeOnlyDate(String(body.startTime)) },
+      create: { tournamentId, groupStartsAt: timeOnlyDate(String(body.startTime)) },
     })
   }
 
