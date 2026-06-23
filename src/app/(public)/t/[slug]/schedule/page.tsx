@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/prisma'
 import { notFound } from 'next/navigation'
 import PublicScheduleClient from '@/components/public/PublicScheduleClient'
+import { filterRealMatches } from '@/lib/tournament/realMatches'
 
 export const dynamic = 'force-dynamic'
 
@@ -19,7 +20,8 @@ export default async function PublicSchedulePage({ params }: { params: { slug: s
     orderBy: [{ scheduledAt: 'asc' }, { court: 'asc' }, { matchOrder: 'asc' }, { matchNumber: 'asc' }],
   })
 
-  const visible = matches.filter(match => match.scheduledAt || match.homeTeamId || match.awayTeamId)
+  const visible = filterRealMatches(matches)
+    .filter(match => match.scheduledAt || match.homeTeamId || match.awayTeamId)
   const serialized = visible.map(match => ({
     ...match,
     scheduledAt: match.scheduledAt?.toISOString() ?? null,
