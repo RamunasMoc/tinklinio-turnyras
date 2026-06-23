@@ -10,9 +10,9 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   if ((session.user as any)?.role !== 'ADMIN') redirect('/login?error=forbidden')
 
   return (
-    <div className="min-h-screen bg-gray-50 flex">
+    <div className="min-h-screen bg-gray-50 md:flex">
       <AdminNav user={session.user as any} />
-      <main className="flex-1 min-w-0 p-6 lg:p-8">
+      <main className="w-full min-w-0 flex-1 px-4 py-4 sm:px-6 sm:py-6 md:p-6 lg:p-8">
         {children}
       </main>
     </div>
