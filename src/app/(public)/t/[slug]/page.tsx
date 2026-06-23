@@ -2,13 +2,17 @@ import { prisma } from '@/lib/prisma'
 import { notFound } from 'next/navigation'
 import PublicMatchCard from '@/components/public/PublicMatchCard'
 import { filterRealMatches } from '@/lib/tournament/realMatches'
+import { knockoutFormatLabel, pointSystemInfo, qualificationInfo, setFormatLabel } from '@/lib/tournament/ruleLabels'
 
 export const dynamic = 'force-dynamic'
 
 export default async function PublicTournamentPage({ params }: { params: { slug: string } }) {
   const tournament = await prisma.tournament.findUnique({
     where: { id: params.slug },
-    include: { _count: { select: { teams: true, groups: true, matches: true } } },
+    include: {
+      config: true,
+      _count: { select: { teams: true, groups: true, matches: true } },
+    },
   })
   if (!tournament) notFound()
 
@@ -39,6 +43,14 @@ export default async function PublicTournamentPage({ params }: { params: { slug:
     .sort((a, b) => (b.finishedAt?.getTime() ?? 0) - (a.finishedAt?.getTime() ?? 0))
     .slice(0, 4)
   const finishedCount = visibleMatches.filter(match => match.status === 'FINISHED').length
+  const config = tournament.config
+  const pointSystem = pointSystemInfo(config?.groupPointSystem)
+  const qualification = qualificationInfo({
+    advanceMode: config?.advanceMode,
+    advancePerGroup: config?.advancePerGroup,
+    advanceTotal: config?.advanceTotal,
+    numGroups: config?.numGroups ?? tournament._count.groups,
+  })
 
   return (
     <div className="space-y-6">
@@ -54,6 +66,26 @@ export default async function PublicTournamentPage({ params }: { params: { slug:
             <div className="mt-1 text-xs font-medium uppercase text-gray-400">{item.label}</div>
           </div>
         ))}
+      </section>
+
+      <section className="grid gap-4 lg:grid-cols-2">
+        <RulesPanel
+          title="Grupių etapas"
+          rows={[
+            { label: 'Setų formatas', value: setFormatLabel(config?.groupSetFormat) },
+            { label: 'Tie-break', value: `Iki ${config?.groupTiebreakPoints ?? 15} taškų` },
+            { label: 'Taškų sistema', value: pointSystem.label, detail: pointSystem.explanation },
+            { label: 'Patenka į atkrintamąsias', value: `${qualification.count} komandų`, detail: qualification.explanation },
+          ]}
+        />
+        <RulesPanel
+          title="Atkrintamosios"
+          rows={[
+            { label: 'Sistema', value: knockoutFormatLabel(config?.knockoutFormat) },
+            { label: 'Setų formatas', value: setFormatLabel(config?.knockoutSetFormat) },
+            { label: 'Tie-break', value: `Iki ${config?.knockoutTiebreakPoints ?? 15} taškų` },
+          ]}
+        />
       </section>
 
       {live.length > 0 && (
@@ -87,6 +119,31 @@ export default async function PublicTournamentPage({ params }: { params: { slug:
         )}
       </section>
     </div>
+  )
+}
+
+function RulesPanel({
+  title,
+  rows,
+}: {
+  title: string
+  rows: Array<{ label: string; value: string; detail?: string }>
+}) {
+  return (
+    <section className="overflow-hidden rounded-lg border border-gray-200 bg-white">
+      <h2 className="border-b border-gray-100 bg-gray-50 px-4 py-3 text-sm font-semibold text-gray-900">{title}</h2>
+      <dl className="divide-y divide-gray-100">
+        {rows.map(row => (
+          <div key={row.label} className="grid gap-1 px-4 py-3 sm:grid-cols-[150px_1fr] sm:gap-4">
+            <dt className="text-xs font-medium text-gray-500">{row.label}</dt>
+            <dd>
+              <div className="text-sm font-medium text-gray-900">{row.value}</div>
+              {row.detail && <p className="mt-1 text-xs leading-5 text-gray-500">{row.detail}</p>}
+            </dd>
+          </div>
+        ))}
+      </dl>
+    </section>
   )
 }
 
