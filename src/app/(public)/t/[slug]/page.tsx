@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/prisma'
 import { notFound } from 'next/navigation'
 import PublicMatchCard from '@/components/public/PublicMatchCard'
+import { filterRealMatches } from '@/lib/tournament/realMatches'
 
 export const dynamic = 'force-dynamic'
 
@@ -22,9 +23,10 @@ export default async function PublicTournamentPage({ params }: { params: { slug:
     orderBy: [{ scheduledAt: 'asc' }, { matchOrder: 'asc' }, { matchNumber: 'asc' }],
   })
 
+  const visibleMatches = filterRealMatches(matches)
   const now = new Date()
-  const live = matches.filter(match => match.status === 'IN_PROGRESS')
-  const upcoming = matches
+  const live = visibleMatches.filter(match => match.status === 'IN_PROGRESS')
+  const upcoming = visibleMatches
     .filter(match => match.status === 'SCHEDULED' && match.homeTeamId && match.awayTeamId)
     .sort((a, b) => {
       const at = a.scheduledAt?.getTime() ?? Number.MAX_SAFE_INTEGER
@@ -32,11 +34,11 @@ export default async function PublicTournamentPage({ params }: { params: { slug:
       return at - bt
     })
     .slice(0, 4)
-  const recent = matches
+  const recent = visibleMatches
     .filter(match => match.status === 'FINISHED')
     .sort((a, b) => (b.finishedAt?.getTime() ?? 0) - (a.finishedAt?.getTime() ?? 0))
     .slice(0, 4)
-  const finishedCount = matches.filter(match => match.status === 'FINISHED').length
+  const finishedCount = visibleMatches.filter(match => match.status === 'FINISHED').length
 
   return (
     <div className="space-y-6">
