@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation'
 import PublicMatchCard from '@/components/public/PublicMatchCard'
 import { filterRealMatches } from '@/lib/tournament/realMatches'
 import { knockoutFormatLabel, pointSystemInfo, qualificationInfo, setFormatLabel } from '@/lib/tournament/ruleLabels'
+import Link from 'next/link'
 
 export const dynamic = 'force-dynamic'
 
@@ -87,6 +88,12 @@ export default async function PublicTournamentPage({ params }: { params: { slug:
           ]}
         />
       </section>
+
+      <div>
+        <Link href={`/t/${params.slug}/rules`} className="inline-flex rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50">
+          Visas nustatymų, rikiavimo ir atrankos aprašymas →
+        </Link>
+      </div>
 
       {live.length > 0 && (
         <section>

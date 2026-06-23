@@ -27,6 +27,7 @@ const TOURNAMENT_NAV = [
   { suffix: '/knockout-schedule', label: 'KO tvarkaraštis', icon: '◷' },
   { suffix: '/knockout-results', label: 'KO rezultatai', icon: '✓' },
   { suffix: '/config', label: 'Nustatymai', icon: '⚙' },
+  { suffix: '/rules', label: 'Taisyklės ir paaiškinimai', icon: '?' },
 ] as const
 
 function isActive(path: string, item: NavItem) {

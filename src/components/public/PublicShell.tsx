@@ -39,6 +39,7 @@ export default function PublicShell({ tournament, liveCount, children }: {
     { href: `${base}/schedule`, label: 'Tvarkaraštis', short: 'Rungtynės' },
     { href: `${base}/groups`, label: 'Grupės', short: 'Grupės' },
     { href: `${base}/bracket`, label: 'Atkrintamosios', short: 'KO' },
+    { href: `${base}/rules`, label: 'Taisyklės', short: 'Taisyklės' },
   ]
   const isActive = (href: string) => href === base ? pathname === base : pathname.startsWith(href)
 
@@ -80,7 +81,7 @@ export default function PublicShell({ tournament, liveCount, children }: {
 
       <main className="mx-auto max-w-5xl px-4 py-6 sm:px-6 sm:py-8">{children}</main>
 
-      <nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-4 border-t border-gray-200 bg-white sm:hidden" aria-label="Turnyro skiltys">
+      <nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 border-t border-gray-200 bg-white sm:hidden" aria-label="Turnyro skiltys">
         {nav.map(item => (
           <Link key={item.href} href={item.href} className={`flex h-16 items-center justify-center px-1 text-center text-xs font-medium ${isActive(item.href) ? 'bg-gray-950 text-white' : 'text-gray-500'}`}>
             {item.short}

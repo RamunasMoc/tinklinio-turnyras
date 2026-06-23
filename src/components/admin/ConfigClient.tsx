@@ -107,7 +107,12 @@ export default function ConfigClient({
         <Link href={`/tournament/${tournamentId}`}>{tName}</Link><span>/</span>
         <span className="text-gray-700">Konfigūracija</span>
       </div>
-      <h1 className="text-xl font-semibold text-gray-900 mb-6">Konfigūracija</h1>
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-xl font-semibold text-gray-900">Konfigūracija</h1>
+        <Link href={`/tournament/${tournamentId}/rules`} className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50">
+          ? Nustatymų paaiškinimas
+        </Link>
+      </div>
 
       {msg && (
         <div className={`mb-4 px-4 py-3 rounded-lg text-sm ${msg.startsWith('✓')
