@@ -1,5 +1,7 @@
 'use client'
 import { useState } from 'react'
+import KnockoutResultsTable from '@/components/shared/KnockoutResultsTable'
+import { buildKnockoutStandings } from '@/lib/tournament/knockoutStandings'
 
 const ROUND_LBL: Record<string,string> = {
   R64:'1/32', R32:'1/16', R16:'1/8', LL:'Lucky Loser', QF:'Ketvirtfinaliai',
@@ -850,6 +852,16 @@ export default function KnockoutClient({ tournamentId, config, initialMatches, q
   const lbRounds = rounds.filter(isLB)
   const hasGF    = rounds.includes('GF')
   const rrRows   = config?.knockoutFormat === 'ROUND_ROBIN' ? roundRobinStandings(matches) : []
+  const knockoutStandings = buildKnockoutStandings(
+    qualified.map(q => ({
+      id: q.team.id,
+      name: q.team.team?.name ?? '',
+      club: q.team.team?.club ?? null,
+      seed: q.seed,
+    })),
+    matches,
+    config?.knockoutFormat,
+  )
 
   function renderRoundCol(round: string) {
     const roundMs = matches
@@ -1082,6 +1094,8 @@ export default function KnockoutClient({ tournamentId, config, initialMatches, q
           <p className="text-sm">Braket dar negeneruotas. Spausk „Generuoti braket".</p>
         </div>
       )}
+
+      {qualified.length > 0 && <KnockoutResultsTable result={knockoutStandings} />}
     </div>
   )
 }

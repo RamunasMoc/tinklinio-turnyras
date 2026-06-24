@@ -5,6 +5,8 @@ import PublicQualifiedTeamsTable from '@/components/public/PublicQualifiedTeamsT
 import { ExampleDEBracket } from '@/components/admin/KnockoutClient'
 import { ROUND_ORDER, roundLabel } from '@/lib/publicTournament'
 import { buildLuckyLoserPlan, getQualifiedTeams } from '@/lib/bracket'
+import KnockoutResultsTable from '@/components/shared/KnockoutResultsTable'
+import { buildKnockoutStandings } from '@/lib/tournament/knockoutStandings'
 
 export const dynamic = 'force-dynamic'
 
@@ -94,6 +96,19 @@ export default async function PublicBracketPage({ params }: { params: { slug: st
       },
     }]
   })
+  const knockoutStandings = buildKnockoutStandings(
+    qualified.flatMap(entry => {
+      const tournamentTeam = teamsById.get(entry.tournamentTeamId)
+      return tournamentTeam ? [{
+        id: tournamentTeam.id,
+        name: tournamentTeam.team.name,
+        club: tournamentTeam.team.club,
+        seed: entry.seed,
+      }] : []
+    }),
+    matches,
+    config?.knockoutFormat,
+  )
 
   return (
     <div>
@@ -122,6 +137,8 @@ export default async function PublicBracketPage({ params }: { params: { slug: st
           </div>
         </div>
       )}
+
+      <KnockoutResultsTable result={knockoutStandings} />
     </div>
   )
 }
