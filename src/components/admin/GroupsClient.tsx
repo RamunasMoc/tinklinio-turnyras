@@ -17,6 +17,7 @@ export default function GroupsClient({ tournamentId, config, initialGroups, allT
   const [loading,  setLoading]  = useState(false)
   const [saving,   setSaving]   = useState(false)
   const [msg,      setMsg]      = useState('')
+  const [moveTarget, setMoveTarget] = useState<{ttId:string; fromGroup:number; teamName:string} | null>(null)
 
   // Drag state
   const dragTeam  = useRef<{ttId:string; fromGroup:number} | null>(null)
@@ -93,7 +94,13 @@ export default function GroupsClient({ tournamentId, config, initialGroups, allT
     const { ttId, fromGroup: fromGroupIdx } = dragTeam.current
     dragTeam.current = null
 
-    if (fromGroupIdx === toGroupIdx) return
+    await moveTeam(ttId, fromGroupIdx, toGroupIdx)
+  }
+
+  async function moveTeam(ttId: string, fromGroupIdx: number, toGroupIdx: number) {
+    if (saving || fromGroupIdx === toGroupIdx) return
+
+    const previousGroups = groups
 
     // Atnaujinti lokalų state
     const newGroups = groups.map((g, gi) => {
@@ -107,6 +114,7 @@ export default function GroupsClient({ tournamentId, config, initialGroups, allT
       return g
     })
     setGroups(newGroups)
+    setMoveTarget(null)
 
     // Išsaugoti į DB + išvalyti tvarkaraščius ir rezultatus
     setSaving(true)
@@ -122,7 +130,7 @@ export default function GroupsClient({ tournamentId, config, initialGroups, allT
     if (!res.ok) {
       setSaving(false)
       setMsg('Klaida perkeliant komandą')
-      setGroups(groups) // atstatyti
+      setGroups(previousGroups) // atstatyti
       return
     }
 
@@ -245,7 +253,7 @@ export default function GroupsClient({ tournamentId, config, initialGroups, allT
       {isManual && groups.length > 0 && (
         <div className="mb-4 px-4 py-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-700 flex items-center gap-2">
           <span>↕️</span>
-          <span>Rankinis režimas — vilkite komandas tarp grupių norėdami pakeisti sudėtį. Pakeitimai išsaugomi automatiškai.</span>
+          <span>Rankinis režimas — kompiuteryje vilkite komandą, telefone palieskite ją ir pasirinkite kitą grupę. Pakeitimai išsaugomi automatiškai.</span>
           {saving && <span className="ml-auto text-xs text-blue-500">Saugoma...</span>}
         </div>
       )}
@@ -258,7 +266,7 @@ export default function GroupsClient({ tournamentId, config, initialGroups, allT
           {T === 0 && <p className="text-sm mt-2 text-red-400">⚠️ Pirmiausia registruokite komandas</p>}
         </div>
       ) : (
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {groups.map((g: any, gi: number) => (
             <div
               key={g.id}
@@ -277,12 +285,16 @@ export default function GroupsClient({ tournamentId, config, initialGroups, allT
               </div>
               <div className="space-y-2">
                 {g.teams.map((tt: any, i: number) => (
-                  <div
+                  <button
+                    type="button"
                     key={tt.id}
                     draggable={isManual}
                     onDragStart={isManual ? () => onDragStart(tt.id, gi) : undefined}
-                    className={`flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs
+                    onClick={isManual ? () => setMoveTarget({ ttId: tt.id, fromGroup: gi, teamName: tt.team.name }) : undefined}
+                    disabled={saving}
+                    className={`flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-xs
                       ${isManual ? 'cursor-grab active:cursor-grabbing' : ''}
+                      disabled:cursor-wait disabled:opacity-60
                       ${tt.seeded
                         ? 'bg-yellow-50 border border-yellow-200'
                         : i < g.advanceCount
@@ -292,7 +304,8 @@ export default function GroupsClient({ tournamentId, config, initialGroups, allT
                     {isManual && <span className="text-gray-300 shrink-0">⠿</span>}
                     <span className="truncate font-medium text-gray-800">{tt.team.name}</span>
                     {i < g.advanceCount && <span className="ml-auto text-green-600 shrink-0">✓</span>}
-                  </div>
+                    {isManual && <span className="shrink-0 text-base leading-none text-gray-300 sm:hidden">›</span>}
+                  </button>
                 ))}
               </div>
               {isManual && dragOver === gi && (
@@ -305,6 +318,57 @@ export default function GroupsClient({ tournamentId, config, initialGroups, allT
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {moveTarget && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center" role="dialog" aria-modal="true" aria-labelledby="move-team-title">
+          <button
+            type="button"
+            className="absolute inset-0 bg-gray-950/40"
+            onClick={() => setMoveTarget(null)}
+            aria-label="Uždaryti komandų perkėlimą"
+          />
+          <div className="relative w-full rounded-t-xl bg-white p-4 shadow-xl sm:max-w-sm sm:rounded-xl">
+            <div className="mb-4 flex items-start justify-between gap-4">
+              <div>
+                <p className="text-xs font-medium text-gray-400">Perkelti komandą</p>
+                <h2 id="move-team-title" className="mt-1 text-lg font-semibold text-gray-900">{moveTarget.teamName}</h2>
+                <p className="mt-1 text-sm text-gray-500">Dabar: Grupė {groups[moveTarget.fromGroup]?.name}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setMoveTarget(null)}
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-xl text-gray-500 hover:bg-gray-100"
+                aria-label="Uždaryti"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="space-y-2">
+              {groups.map((group, groupIndex) => groupIndex !== moveTarget.fromGroup && (
+                <button
+                  key={group.id}
+                  type="button"
+                  disabled={saving}
+                  onClick={() => moveTeam(moveTarget.ttId, moveTarget.fromGroup, groupIndex)}
+                  className="flex w-full items-center justify-between rounded-lg border border-gray-200 px-4 py-3 text-left text-sm font-medium text-gray-800 hover:border-gray-400 hover:bg-gray-50 disabled:opacity-50"
+                >
+                  <span>Grupė {group.name}</span>
+                  <span className="text-xs font-normal text-gray-400">{group.teams.length} komandų</span>
+                </button>
+              ))}
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setMoveTarget(null)}
+              className="mt-4 w-full rounded-lg border border-gray-200 py-2.5 text-sm font-medium text-gray-600 hover:bg-gray-50"
+            >
+              Atšaukti
+            </button>
+          </div>
         </div>
       )}
     </div>
