@@ -89,6 +89,25 @@ describe('atkrintamųjų galutinė rikiuotė', () => {
     expect(result.rows.every(row => row.played === 0)).toBe(true)
   })
 
+  test('tie break įtraukiamas į setus, bet ne į mažųjų taškų statistiką', () => {
+    const result = buildKnockoutStandings(teams.slice(0, 2), [{
+      round: 'F',
+      matchOrder: 1,
+      status: 'FINISHED',
+      homeTeamId: 't1',
+      awayTeamId: 't2',
+      winnerId: 't1',
+      sets: [
+        { homeScore: 15, awayScore: 10, isTiebreak: false },
+        { homeScore: 10, awayScore: 15, isTiebreak: false },
+        { homeScore: 11, awayScore: 8, isTiebreak: true },
+      ],
+    }], 'SINGLE_ELIMINATION')
+    expect(result.rows[0]).toMatchObject({
+      id: 't1', setsWon: 2, setsLost: 1, pointsWon: 25, pointsLost: 25,
+    })
+  })
+
   test('tarpinėje rikiuotėje iškritusių komandų vietos lieka žemiau dar kovojančių', () => {
     const result = buildKnockoutStandings(teams, [
       match('QF', 1, 't1', 't8', 't1'),

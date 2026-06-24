@@ -175,9 +175,10 @@ export function buildKnockoutStandings(
     const loser = rows.get(result.loserId)
     if (!home || !away || !winner || !loser) continue
 
-    const mainSets = (match.sets ?? []).filter(set => !set.isTiebreak)
-    const homeSetsWon = mainSets.filter(set => set.homeScore > set.awayScore).length
-    const awaySetsWon = mainSets.filter(set => set.awayScore > set.homeScore).length
+    const allSets = match.sets ?? []
+    const mainSets = allSets.filter(set => !set.isTiebreak)
+    const homeSetsWon = allSets.filter(set => set.homeScore > set.awayScore).length
+    const awaySetsWon = allSets.filter(set => set.awayScore > set.homeScore).length
 
     home.played += 1
     away.played += 1
