@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/prisma'
 import { notFound } from 'next/navigation'
 import StandingsClient from '@/components/admin/StandingsClient'
+import { groupAdvanceCounts } from '@/lib/tournament/qualification'
 
 export const dynamic = 'force-dynamic'
 
@@ -29,11 +30,20 @@ export default async function PublicGroupsPage({ params }: { params: { slug: str
       },
     },
   })
+  const advanceCounts = groupAdvanceCounts(
+    tournament.config ?? {},
+    groups.length,
+    groups.map(group => group.maxTeams),
+  )
+  const groupsForDisplay = groups.map((group, index) => ({
+    ...group,
+    advanceCount: advanceCounts[index] ?? group.advanceCount,
+  }))
 
   return (
     <StandingsClient
       tournamentId={params.slug}
-      initialGroups={groups as any}
+      initialGroups={groupsForDisplay as any}
       advanceCount={tournament.config?.advancePerGroup ?? 2}
       publicView
     />

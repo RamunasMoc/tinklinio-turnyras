@@ -3,6 +3,7 @@ import { notFound }     from 'next/navigation'
 import Link             from 'next/link'
 import KnockoutClient   from '@/components/admin/KnockoutClient'
 import { buildLuckyLoserPlan, getQualifiedTeams } from '@/lib/bracket'
+import { groupAdvanceCounts } from '@/lib/tournament/qualification'
 
 export const dynamic = 'force-dynamic'
 
@@ -44,9 +45,14 @@ export default async function KnockoutPage({ params }: { params: { id: string } 
     orderBy: [{ groupPoints: 'desc' }, { groupWins: 'desc' }],
   })
 
-  const groupsForBracket = groupsWithMatches.map(group => ({
+  const advanceCounts = groupAdvanceCounts(
+    t.config ?? {},
+    groupsWithMatches.length,
+    groupsWithMatches.map(group => group.maxTeams),
+  )
+  const groupsForBracket = groupsWithMatches.map((group, index) => ({
     ...group,
-    advanceCount: group.advanceCount ?? t.config?.advancePerGroup ?? 2,
+    advanceCount: advanceCounts[index] ?? group.advanceCount ?? t.config?.advancePerGroup ?? 2,
   }))
   const bracketQualified = t.config?.knockoutFormat === 'LUCKY_LOSER'
     ? (() => {

@@ -2,6 +2,7 @@ import { prisma }         from '@/lib/prisma'
 import { notFound }       from 'next/navigation'
 import Link               from 'next/link'
 import GroupsClient       from '@/components/admin/GroupsClient'
+import { groupAdvanceCounts } from '@/lib/tournament/qualification'
 
 export default async function GroupsPage({ params }: { params: { id: string } }) {
   const t = await prisma.tournament.findUnique({
@@ -18,6 +19,15 @@ export default async function GroupsPage({ params }: { params: { id: string } })
     where: { tournamentId: params.id }, include: { team: true },
     orderBy: [{ seeded: 'desc' }, { seedRank: 'asc' }],
   })
+  const advanceCounts = groupAdvanceCounts(
+    t.config ?? {},
+    groups.length,
+    groups.map(group => group.maxTeams),
+  )
+  const groupsForDisplay = groups.map((group, index) => ({
+    ...group,
+    advanceCount: advanceCounts[index] ?? group.advanceCount,
+  }))
 
   return (
     <div className="max-w-5xl">
@@ -26,7 +36,7 @@ export default async function GroupsPage({ params }: { params: { id: string } })
         <Link href={`/tournament/${params.id}`}>{t.name}</Link><span>/</span>
         <span className="text-gray-700">Grupės</span>
       </div>
-      <GroupsClient tournamentId={params.id} config={t.config as any} initialGroups={groups as any} allTeams={allTeams as any} />
+      <GroupsClient tournamentId={params.id} config={t.config as any} initialGroups={groupsForDisplay as any} allTeams={allTeams as any} />
     </div>
   )
 }

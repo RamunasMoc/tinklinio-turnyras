@@ -7,6 +7,7 @@ import { ROUND_ORDER, roundLabel } from '@/lib/publicTournament'
 import { buildLuckyLoserPlan, getQualifiedTeams } from '@/lib/bracket'
 import KnockoutResultsTable from '@/components/shared/KnockoutResultsTable'
 import { buildKnockoutStandings } from '@/lib/tournament/knockoutStandings'
+import { groupAdvanceCounts } from '@/lib/tournament/qualification'
 
 export const dynamic = 'force-dynamic'
 
@@ -52,9 +53,14 @@ export default async function PublicBracketPage({ params }: { params: { slug: st
   })
 
   const config = tournament.config
-  const groupsWithCount = tournament.groups.map(group => ({
+  const advanceCounts = groupAdvanceCounts(
+    config ?? {},
+    tournament.groups.length,
+    tournament.groups.map(group => group.maxTeams),
+  )
+  const groupsWithCount = tournament.groups.map((group, index) => ({
     ...group,
-    advanceCount: group.advanceCount ?? config?.advancePerGroup ?? 2,
+    advanceCount: advanceCounts[index] ?? group.advanceCount ?? config?.advancePerGroup ?? 2,
   }))
   const qualified = config?.knockoutFormat === 'LUCKY_LOSER'
     ? (() => {
