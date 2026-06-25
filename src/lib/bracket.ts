@@ -8,6 +8,7 @@
 // ============================================================
 
 import { prisma } from './prisma'
+import { groupAdvanceCounts } from './tournament/qualification'
 
 export type BracketTeam = {
   tournamentTeamId: string
@@ -83,13 +84,10 @@ export async function generateBracket(tournamentId: string) {
   // Apskaičiuoti kiek komandų patenka tiesiogiai iš kiekvienos grupės.
   // advanceMode='total' reiškia: advancePerGroup tiesiogiai + geriausi wild card iki advanceTotal.
   const groups = tournament.groups
-  const advancePerGroup = cfg.advancePerGroup ?? 2
-
-  // Naudoti realius grupių advanceCount. Tai svarbu, kai grupės nevienodo dydžio
-  // ir patekimas yra pvz. A:2, B:1, C:1, o ne vienodas visoms grupėms.
-  const groupsWithCount = groups.map(g => ({
+  const advanceCounts = groupAdvanceCounts(cfg, groups.length, groups.map(g => g.maxTeams))
+  const groupsWithCount = groups.map((g, index) => ({
     ...g,
-    advanceCount: g.advanceCount ?? advancePerGroup,
+    advanceCount: advanceCounts[index] ?? g.advanceCount ?? cfg.advancePerGroup ?? 2,
   }))
 
   // Ištrinti senus KO mačus
