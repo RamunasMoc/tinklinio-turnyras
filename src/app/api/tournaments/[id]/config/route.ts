@@ -3,6 +3,7 @@ import { prisma }                from '@/lib/prisma'
 import { withAuth, jsonOk, jsonErr, getParam } from '@/lib/middleware/auth'
 import { z }                     from 'zod'
 import { timeOnlyDate }          from '@/lib/timezone'
+import { groupAdvanceCounts }    from '@/lib/tournament/qualification'
 
 const ConfigSchema = z.object({
   numGroups:              z.number().int().min(1).max(32),
@@ -57,5 +58,21 @@ export const PUT = withAuth(async (req: NextRequest, ctx: any) => {
       groupStartsAt:   d.groupStartsAt    ? timeOnlyDate(d.groupStartsAt) : null,
     },
   })
+  const groups = await prisma.group.findMany({
+    where: { tournamentId: id },
+    orderBy: { order: 'asc' },
+    select: { id: true, maxTeams: true },
+  })
+  if (groups.length > 0) {
+    const counts = groupAdvanceCounts(d, groups.length, groups.map(group => group.maxTeams))
+    await prisma.$transaction(
+      groups.map((group, index) =>
+        prisma.group.update({
+          where: { id: group.id },
+          data: { advanceCount: counts[index] ?? d.advancePerGroup },
+        }),
+      ),
+    )
+  }
   return jsonOk(cfg)
 })

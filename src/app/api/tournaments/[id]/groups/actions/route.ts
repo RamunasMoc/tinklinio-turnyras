@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { drawTeams } from '@/lib/tournament/draw'
 import { getParam, requireAuth } from '@/lib/middleware/auth'
+import { groupAdvanceCounts } from '@/lib/tournament/qualification'
 
 async function clearGroupMatches(tournamentId: string) {
   await prisma.$transaction([
@@ -22,16 +23,6 @@ async function clearGroupMatches(tournamentId: string) {
   ])
 }
 
-function advanceCounts(cfg: any, groupCount: number) {
-  if ((cfg.advanceMode ?? 'fixed') === 'fixed') {
-    return Array(groupCount).fill(cfg.advancePerGroup ?? 2)
-  }
-  const total = cfg.advanceTotal ?? 8
-  const base = Math.floor(total / groupCount)
-  const extra = total % groupCount
-  return Array.from({ length: groupCount }, (_, i) => base + (i < extra ? 1 : 0))
-}
-
 async function generateGroups(tournamentId: string) {
   const cfg = await prisma.tournamentConfig.findUnique({ where: { tournamentId } })
   if (!cfg) return
@@ -47,7 +38,7 @@ async function generateGroups(tournamentId: string) {
   const base = Math.floor(teams.length / groupCount)
   const extra = teams.length % groupCount
   const groupSizes = Array.from({ length: groupCount }, (_, i) => base + (i < extra ? 1 : 0))
-  const advCounts = advanceCounts(cfg, groupCount)
+  const advCounts = groupAdvanceCounts(cfg, groupCount, groupSizes)
   const assignments = drawTeams(
     teams.map(tt => ({ id: tt.id, seeded: tt.seeded, rating: tt.team.rating, clubId: tt.team.club ?? null })),
     groupCount,
@@ -112,8 +103,14 @@ async function redrawGroups(tournamentId: string) {
   await clearGroupMatches(tournamentId)
   await prisma.tournamentTeam.updateMany({ where: { tournamentId }, data: { groupId: null } })
 
+  const advCounts = groupAdvanceCounts(cfg, groups.length, groups.map(g => g.maxTeams))
+
   for (let gi = 0; gi < groups.length; gi++) {
     const groupTeams = teams.filter((_, i) => assignments[i] === gi)
+    await prisma.group.update({
+      where: { id: groups[gi].id },
+      data: { advanceCount: advCounts[gi] ?? cfg.advancePerGroup ?? 2 },
+    })
     await prisma.tournamentTeam.updateMany({
       where: { id: { in: groupTeams.map(t => t.id) } },
       data: { groupId: groups[gi].id },
