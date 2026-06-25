@@ -85,8 +85,12 @@ export async function generateBracket(tournamentId: string) {
   const groups = tournament.groups
   const advancePerGroup = cfg.advancePerGroup ?? 2
 
-  // Atnaujinti advanceCount grupėse
-  const groupsWithCount = groups.map(g => ({ ...g, advanceCount: advancePerGroup }))
+  // Naudoti realius grupių advanceCount. Tai svarbu, kai grupės nevienodo dydžio
+  // ir patekimas yra pvz. A:2, B:1, C:1, o ne vienodas visoms grupėms.
+  const groupsWithCount = groups.map(g => ({
+    ...g,
+    advanceCount: g.advanceCount ?? advancePerGroup,
+  }))
 
   // Ištrinti senus KO mačus
   await prisma.match.deleteMany({ where: { tournamentId, groupId: null } })

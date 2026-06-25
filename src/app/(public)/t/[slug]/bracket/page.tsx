@@ -54,7 +54,7 @@ export default async function PublicBracketPage({ params }: { params: { slug: st
   const config = tournament.config
   const groupsWithCount = tournament.groups.map(group => ({
     ...group,
-    advanceCount: config?.advancePerGroup ?? group.advanceCount,
+    advanceCount: group.advanceCount ?? config?.advancePerGroup ?? 2,
   }))
   const qualified = config?.knockoutFormat === 'LUCKY_LOSER'
     ? (() => {
@@ -68,7 +68,7 @@ export default async function PublicBracketPage({ params }: { params: { slug: st
           config.groupPointSystem,
         )
       : []
-  const directCount = (config?.advancePerGroup ?? 0) * tournament.groups.length
+  const directCount = groupsWithCount.reduce((sum, group) => sum + (group.advanceCount ?? 0), 0)
   const teamsById = new Map(
     tournament.groups.flatMap(group => group.teams).map(team => [team.id, team]),
   )

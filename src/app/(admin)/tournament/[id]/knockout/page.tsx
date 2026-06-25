@@ -46,7 +46,7 @@ export default async function KnockoutPage({ params }: { params: { id: string } 
 
   const groupsForBracket = groupsWithMatches.map(group => ({
     ...group,
-    advanceCount: t.config?.advancePerGroup ?? 2,
+    advanceCount: group.advanceCount ?? t.config?.advancePerGroup ?? 2,
   }))
   const bracketQualified = t.config?.knockoutFormat === 'LUCKY_LOSER'
     ? (() => {
