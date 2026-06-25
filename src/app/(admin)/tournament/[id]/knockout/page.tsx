@@ -2,6 +2,7 @@ import { prisma }       from '@/lib/prisma'
 import { notFound }     from 'next/navigation'
 import Link             from 'next/link'
 import KnockoutClient   from '@/components/admin/KnockoutClient'
+import { buildLuckyLoserPlan, getQualifiedTeams } from '@/lib/bracket'
 
 export const dynamic = 'force-dynamic'
 
@@ -26,7 +27,10 @@ export default async function KnockoutPage({ params }: { params: { id: string } 
     where:   { tournamentId: params.id },
     orderBy: { order: 'asc' },
     include: {
-      teams:   { orderBy: [{ groupPoints:'desc' }, { groupWins:'desc' }] },
+      teams:   {
+        include: { team: true },
+        orderBy: [{ groupPoints:'desc' }, { groupWins:'desc' }],
+      },
       matches: {
         where:   { status: 'FINISHED' },
         include: { sets: true },
@@ -38,6 +42,32 @@ export default async function KnockoutPage({ params }: { params: { id: string } 
     where:   { tournamentId: params.id, groupId: { not: null } },
     include: { team: true, group: true },
     orderBy: [{ groupPoints: 'desc' }, { groupWins: 'desc' }],
+  })
+
+  const groupsForBracket = groupsWithMatches.map(group => ({
+    ...group,
+    advanceCount: t.config?.advancePerGroup ?? 2,
+  }))
+  const bracketQualified = t.config?.knockoutFormat === 'LUCKY_LOSER'
+    ? (() => {
+        const plan = buildLuckyLoserPlan(groupsForBracket as any, t.config as any)
+        return [...plan.direct, ...plan.llSorted]
+      })()
+    : getQualifiedTeams(
+        groupsForBracket as any,
+        t.config?.advanceMode === 'total' ? t.config?.advanceTotal ?? undefined : undefined,
+        t.config?.groupPointSystem,
+      )
+  const teamsById = new Map(qualifiedTeams.map(team => [team.id, team]))
+  const serverQualifiedTeams = bracketQualified.flatMap(entry => {
+    const team = teamsById.get(entry.tournamentTeamId)
+    if (!team) return []
+    return [{
+      team,
+      group: entry.fromGroup ?? team.group?.name ?? '?',
+      pos: entry.fromPosition ?? 0,
+      seed: entry.seed ?? 0,
+    }]
   })
 
   return (
@@ -52,6 +82,7 @@ export default async function KnockoutPage({ params }: { params: { id: string } 
         config={t.config as any}
         initialMatches={matches as any}
         qualifiedTeams={qualifiedTeams as any}
+        serverQualifiedTeams={serverQualifiedTeams as any}
         groupsWithMatches={groupsWithMatches as any}
       />
     </div>

@@ -552,8 +552,8 @@ export function ExampleDEBracket({ matches }: { matches: any[] }) {
   )
 }
 
-export default function KnockoutClient({ tournamentId, config, initialMatches, qualifiedTeams, groupsWithMatches = [] }:
-  { tournamentId:string; config:any; initialMatches:any[]; qualifiedTeams:any[]; groupsWithMatches?:any[] }) {
+export default function KnockoutClient({ tournamentId, config, initialMatches, qualifiedTeams, serverQualifiedTeams = [], groupsWithMatches = [] }:
+  { tournamentId:string; config:any; initialMatches:any[]; qualifiedTeams:any[]; serverQualifiedTeams?:any[]; groupsWithMatches?:any[] }) {
 
   const [matches,  setMatches]  = useState<any[]>(initialMatches)
   const [loading,  setLoading]  = useState(false)
@@ -802,6 +802,8 @@ export default function KnockoutClient({ tournamentId, config, initialMatches, q
     qualified.splice(0, qualified.length, ...lucky)
   }
 
+  const displayQualified = serverQualifiedTeams.length > 0 ? serverQualifiedTeams : qualified
+
   const hasGroupResults = qualifiedTeams.some(tt =>
     tt.groupWins > 0 || tt.groupLosses > 0
   )
@@ -817,8 +819,8 @@ export default function KnockoutClient({ tournamentId, config, initialMatches, q
       .flatMap((m: any) => [m.homeTeamId, m.awayTeamId])
       .filter(Boolean)
   )
-  const qualifiedTeamIds = new Set(qualified.map(q => q.team.id))
-  const bracketOutOfSync = matches.length > 0 && qualified.length > 0 && (
+  const qualifiedTeamIds = new Set(displayQualified.map(q => q.team.id))
+  const bracketOutOfSync = matches.length > 0 && displayQualified.length > 0 && (
     bracketTeamIds.size !== qualifiedTeamIds.size ||
     [...qualifiedTeamIds].some(id => !bracketTeamIds.has(id))
   )
@@ -853,7 +855,7 @@ export default function KnockoutClient({ tournamentId, config, initialMatches, q
   const hasGF    = rounds.includes('GF')
   const rrRows   = config?.knockoutFormat === 'ROUND_ROBIN' ? roundRobinStandings(matches) : []
   const knockoutStandings = buildKnockoutStandings(
-    qualified.map(q => ({
+    displayQualified.map(q => ({
       id: q.team.id,
       name: q.team.team?.name ?? '',
       club: q.team.team?.club ?? null,
@@ -950,14 +952,14 @@ export default function KnockoutClient({ tournamentId, config, initialMatches, q
       )}
 
       {/* ── Kvalifikuotų komandų sąrašas ── */}
-      {qualified.length > 0 && (
+      {displayQualified.length > 0 && (
         <div className="bg-white border border-gray-200 rounded-xl overflow-hidden mb-5">
           <div className="px-4 py-3 bg-gray-50 border-b border-gray-100 flex items-center justify-between">
             <span className="text-sm font-semibold text-gray-700">
               Patenka į atkrintamąsias
               {!hasGroupResults && <span className="ml-2 text-xs font-normal text-yellow-600 bg-yellow-50 px-2 py-0.5 rounded-full">Grupių rezultatai neįvesti — pagal registracijos eilę</span>}
             </span>
-            <span className="text-xs text-gray-400">{qualified.length} komandų</span>
+            <span className="text-xs text-gray-400">{displayQualified.length} komandų</span>
           </div>
           <div className="divide-y divide-gray-50">
             {/* Lentelės antraštė */}
@@ -975,7 +977,7 @@ export default function KnockoutClient({ tournamentId, config, initialMatches, q
               </div>
             </div>
           )}
-          {qualified.map((q, i) => {
+          {displayQualified.map((q, i) => {
               const isWild = config?.knockoutFormat === 'LUCKY_LOSER'
                 ? i >= luckyLoserDirectPositions * sortedGroups.length
                 : advMode==='total' && i >= advPerGroup * sortedGroups.length
@@ -1022,7 +1024,7 @@ export default function KnockoutClient({ tournamentId, config, initialMatches, q
         </div>
       )}
 
-      {qualified.length === 0 && matches.length === 0 && (
+      {displayQualified.length === 0 && matches.length === 0 && (
         <div className="text-center py-12 bg-white border border-gray-200 rounded-xl text-gray-400 mb-5">
           <p className="text-lg mb-2">🏆</p>
           <p>Grupių rezultatai neįvesti arba grupės nesuformuotos.</p>
@@ -1089,13 +1091,13 @@ export default function KnockoutClient({ tournamentId, config, initialMatches, q
         </>
       )}
 
-      {matches.length === 0 && qualified.length > 0 && (
+      {matches.length === 0 && displayQualified.length > 0 && (
         <div className="text-center py-8 bg-gray-50 border border-dashed border-gray-300 rounded-xl text-gray-400">
           <p className="text-sm">Braket dar negeneruotas. Spausk „Generuoti braket".</p>
         </div>
       )}
 
-      {qualified.length > 0 && <KnockoutResultsTable result={knockoutStandings} />}
+      {displayQualified.length > 0 && <KnockoutResultsTable result={knockoutStandings} />}
     </div>
   )
 }
