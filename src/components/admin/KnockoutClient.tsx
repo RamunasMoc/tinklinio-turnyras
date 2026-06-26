@@ -2,6 +2,7 @@
 import { useState } from 'react'
 import KnockoutResultsTable from '@/components/shared/KnockoutResultsTable'
 import { buildKnockoutStandings } from '@/lib/tournament/knockoutStandings'
+import { groupMatchPoints } from '@/lib/tournament/points'
 
 const ROUND_LBL: Record<string,string> = {
   R64:'1/32', R32:'1/16', R16:'1/8', LL:'Lucky Loser', QF:'Ketvirtfinaliai',
@@ -721,18 +722,14 @@ export default function KnockoutClient({ tournamentId, config, initialMatches, q
           for (const s of allSets.filter((s:any) => !s.isTiebreak)) {
             ptsWon += s.homeScore; ptsLost += s.awayScore
           }
-          if (config?.groupPointSystem === 'SET_RATIO') points += hSetsAll
-          else if (config?.groupPointSystem === 'TWO_ONE') points += hw ? 2 : 1
-          else points += hw ? 1 : 0
+          points += groupMatchPoints(config?.groupPointSystem, hSetsAll, aSetsAll, hw)
         } else {
           wins    += hw ? 0 : 1;  losses  += hw ? 1 : 0
           setsWon += aSetsAll;    setsLost+= hSetsAll
           for (const s of allSets.filter((s:any) => !s.isTiebreak)) {
             ptsWon += s.awayScore; ptsLost += s.homeScore
           }
-          if (config?.groupPointSystem === 'SET_RATIO') points += aSetsAll
-          else if (config?.groupPointSystem === 'TWO_ONE') points += hw ? 1 : 2
-          else points += hw ? 0 : 1
+          points += groupMatchPoints(config?.groupPointSystem, aSetsAll, hSetsAll, !hw)
         }
       }
       return {

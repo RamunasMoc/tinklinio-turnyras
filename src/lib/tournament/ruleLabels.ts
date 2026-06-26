@@ -17,6 +17,10 @@ const POINT_SYSTEMS: Record<string, { label: string; explanation: string }> = {
     label: '2 taškai už laimėjimą, 1 už pralaimėjimą',
     explanation: 'Kiekvienų rungtynių nugalėtoja gauna 2 turnyrinius taškus, pralaimėjusi komanda gauna 1.',
   },
+  THREE_TWO_ONE_ZERO: {
+    label: '3/2/1/0 pagal setų rezultatą',
+    explanation: 'Už laimėjimą 2:0 skiriami 3 taškai, už laimėjimą 2:1 – 2 taškai, už pralaimėjimą 1:2 – 1 taškas, už pralaimėjimą 0:2 – 0 taškų. Galima naudoti tik „Best of 2“ grupių rungtynėms.',
+  },
   WIN_LOSS: {
     label: '1 taškas už laimėjimą, 0 už pralaimėjimą',
     explanation: 'Kiekvienų rungtynių nugalėtoja gauna 1 turnyrinį tašką, pralaimėjusi komanda taškų negauna.',

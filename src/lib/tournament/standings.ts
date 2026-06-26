@@ -1,4 +1,5 @@
 import { prisma } from '../prisma'
+import { groupMatchPoints } from './points'
 
 export async function recalcGroupStandings(groupId: string) {
   const group = await prisma.group.findUnique({
@@ -45,14 +46,8 @@ export async function recalcGroupStandings(groupId: string) {
     h.wins    += hw ? 1 : 0;  h.losses += hw ? 0 : 1
     a.wins    += hw ? 0 : 1;  a.losses += hw ? 1 : 0
 
-    if (pointSystem === 'SET_RATIO') {
-      h.points += hSetsAll
-      a.points += aSetsAll
-    } else if (pointSystem === 'TWO_ONE') {
-      h.points += hw ? 2 : 1;  a.points += hw ? 1 : 2
-    } else {
-      h.points += hw ? 1 : 0;  a.points += hw ? 0 : 1
-    }
+    h.points += groupMatchPoints(pointSystem, hSetsAll, aSetsAll, hw)
+    a.points += groupMatchPoints(pointSystem, aSetsAll, hSetsAll, !hw)
   }
 
   for (const [id, s] of Object.entries(stats)) {

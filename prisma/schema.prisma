@@ -60,6 +60,7 @@ enum KnockoutFormat {
 enum PointSystem {
   WIN_LOSS        // Tik pergalė/pralaimėjimas
   TWO_ONE         // 2 t. laimėjimas / 1 t. pralaimėjimas
+  THREE_TWO_ONE_ZERO // 3/2/1/0 pagal setų rezultatą
   SET_RATIO       // Setų santykis
 }
 

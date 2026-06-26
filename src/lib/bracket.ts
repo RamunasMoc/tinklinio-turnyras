@@ -9,6 +9,7 @@
 
 import { prisma } from './prisma'
 import { groupAdvanceCounts } from './tournament/qualification'
+import { groupMatchPoints } from './tournament/points'
 
 export type BracketTeam = {
   tournamentTeamId: string
@@ -271,9 +272,7 @@ function calcAdjustedStats(tt: any, group: any, minGroupSize: number, pointSyste
         ptsWon += set.homeScore
         ptsLost += set.awayScore
       }
-      if (pointSystem === 'SET_RATIO') points += homeSetsWon
-      else if (pointSystem === 'TWO_ONE') points += homeWon ? 2 : 1
-      else points += homeWon ? 1 : 0
+      points += groupMatchPoints(pointSystem, homeSetsWon, awaySetsWon, homeWon)
     } else {
       setsWon += awaySetsWon
       setsLost += homeSetsWon
@@ -281,9 +280,7 @@ function calcAdjustedStats(tt: any, group: any, minGroupSize: number, pointSyste
         ptsWon += set.awayScore
         ptsLost += set.homeScore
       }
-      if (pointSystem === 'SET_RATIO') points += awaySetsWon
-      else if (pointSystem === 'TWO_ONE') points += homeWon ? 1 : 2
-      else points += homeWon ? 0 : 1
+      points += groupMatchPoints(pointSystem, awaySetsWon, homeSetsWon, !homeWon)
     }
   }
 

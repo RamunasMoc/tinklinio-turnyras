@@ -103,8 +103,8 @@ export default function TournamentRulesGuide({ config }: { config?: Config | nul
           <SettingRow name="Tie-break iki" values="11 arba 15 taškų" current={config?.groupTiebreakPoints}>
             Taikoma tik tada, kai „Best of 2“ rungtynėse pagrindiniai setai pasidalijami 1:1.
           </SettingRow>
-          <SettingRow name="Laimėjimo sistema" values="2/1 | 1/0 | Taškas už laimėtą setą" current={config ? pointSystemInfo(config.groupPointSystem).label : undefined}>
-            <strong>2/1:</strong> nugalėtoja gauna 2 turnyrinius taškus, pralaimėjusi – 1. <strong>1/0:</strong> nugalėtoja gauna 1, pralaimėjusi – 0. <strong>Taškas už setą:</strong> turnyrinių taškų skaičius lygus laimėtų setų skaičiui, įskaitant tie-break.
+          <SettingRow name="Laimėjimo sistema" values="2/1 | 3/2/1/0 | 1/0 | Taškas už laimėtą setą" current={config ? pointSystemInfo(config.groupPointSystem).label : undefined}>
+            <strong>2/1:</strong> nugalėtoja gauna 2 turnyrinius taškus, pralaimėjusi – 1. <strong>3/2/1/0:</strong> 2:0 pergalė verta 3 taškų, 2:1 pergalė – 2, 1:2 pralaimėjimas – 1, 0:2 pralaimėjimas – 0; šis variantas galimas tik „Best of 2“ grupių rungtynėms. <strong>1/0:</strong> nugalėtoja gauna 1, pralaimėjusi – 0. <strong>Taškas už setą:</strong> turnyrinių taškų skaičius lygus laimėtų setų skaičiui, įskaitant tie-break.
           </SettingRow>
           <SettingRow name="Burtų metodas" values="Atsitiktinis | Sėjamosios pagal reitingą | Gyvatėlė | Rankinis" current={config?.drawMethod ? DRAW_LABELS[config.drawMethod] : undefined}>
             Atsitiktiniame metode sėjamosios tolygiai paskirstomos, o jų ir kitų komandų vietos atsitiktinamos. „Sėjamosios pagal reitingą“ pirmiausia išdėsto sėjamąsias pagal reitingą, likusias komandas traukia atsitiktinai. Gyvatėlė visas komandas dėlioja reitingo seka pirmyn ir atgal per grupes. Rankinis metodas sukuria pradinį atsitiktinį paskirstymą, kurį administratorius gali koreguoti.

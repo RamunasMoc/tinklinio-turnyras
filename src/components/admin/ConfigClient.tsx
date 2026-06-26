@@ -1,8 +1,9 @@
 'use client'
-import { useState }            from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter }           from 'next/navigation'
 import Link                    from 'next/link'
 import { combineDateAndTimeInZone } from '@/lib/timezone'
+import { isBestOfTwoSetFormat, THREE_TWO_ONE_ZERO } from '@/lib/tournament/points'
 
 type ConfigForm = {
   numGroups:string; advancePerGroup:string; advanceTotal:string; advanceMode:string; groupSetFormat:string; groupTiebreakPoints:string
@@ -39,6 +40,13 @@ export default function ConfigClient({
   const [form, setForm] = useState(initialForm)
 
   const set = (k: string, v: any) => setForm(f => ({...f, [k]: v}))
+  const groupPointSystemSupportsSetScore = isBestOfTwoSetFormat(form.groupSetFormat)
+
+  useEffect(() => {
+    if (!groupPointSystemSupportsSetScore && form.groupPointSystem === THREE_TWO_ONE_ZERO) {
+      set('groupPointSystem', 'TWO_ONE')
+    }
+  }, [groupPointSystemSupportsSetScore, form.groupPointSystem])
 
   const criticalChanged = origForm && (
     form.numGroups !== origForm.numGroups ||
@@ -217,6 +225,9 @@ export default function ConfigClient({
             <div><label className={lbl}>Laimėjimo sistema</label>
               <select value={form.groupPointSystem} onChange={e=>set('groupPointSystem',e.target.value)} className={inp}>
                 <option value="TWO_ONE">2 Taškai - Laimėjimas/ 1 Taškas - Pralaimėjimas</option>
+                {groupPointSystemSupportsSetScore && (
+                  <option value={THREE_TWO_ONE_ZERO}>3 Taškai - 2:0 / 2 Taškai - 2:1 / 1 Taškas - 1:2 / 0 Taškų - 0:2</option>
+                )}
                 <option value="WIN_LOSS">1 Taškas - Laimėjimas/ 0 Taškų - Pralaimėjimas</option>
                 <option value="SET_RATIO">Setų santykis (Taškas už laimėtą setą)</option>
               </select></div>

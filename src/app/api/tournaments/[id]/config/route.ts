@@ -4,6 +4,7 @@ import { withAuth, jsonOk, jsonErr, getParam } from '@/lib/middleware/auth'
 import { z }                     from 'zod'
 import { timeOnlyDate }          from '@/lib/timezone'
 import { groupAdvanceCounts }    from '@/lib/tournament/qualification'
+import { isBestOfTwoSetFormat, THREE_TWO_ONE_ZERO } from '@/lib/tournament/points'
 
 const ConfigSchema = z.object({
   numGroups:              z.number().int().min(1).max(32),
@@ -14,7 +15,7 @@ const ConfigSchema = z.object({
   groupTiebreakPoints:    z.number().int().refine(n => [11,15].includes(n)),
   groupTimeMinutes:       z.number().int().min(15).max(180),
   groupCourts:            z.number().int().min(1).max(20),
-  groupPointSystem:       z.enum(['WIN_LOSS','TWO_ONE','SET_RATIO']),
+  groupPointSystem:       z.enum(['WIN_LOSS','TWO_ONE','THREE_TWO_ONE_ZERO','SET_RATIO']),
   groupBreakMinutes:      z.number().int().min(0).max(60),
   drawMethod:             z.enum(['RANDOM','SEEDED_RANDOM','SNAKE','MANUAL']),
   numSeeds:               z.number().int().min(0).optional().default(0),
@@ -29,6 +30,14 @@ const ConfigSchema = z.object({
   knockoutStartsAt:       z.string().datetime().optional().nullable(),
   lunchBreakMinutes:      z.number().int().min(0).max(120).optional().nullable(),
   groupStartsAt:          z.string().optional().nullable(),
+}).superRefine((data, ctx) => {
+  if (data.groupPointSystem === THREE_TWO_ONE_ZERO && !isBestOfTwoSetFormat(data.groupSetFormat)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['groupPointSystem'],
+      message: '3/2/1/0 laimėjimo sistema galima tik kai grupėse žaidžiama Best of 2 formatu.',
+    })
+  }
 })
 
 export async function GET(_req: NextRequest, ctx: any) {

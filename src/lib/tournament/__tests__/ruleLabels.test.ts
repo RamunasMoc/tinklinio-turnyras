@@ -27,4 +27,9 @@ describe('viešai rodomos turnyro taisyklės', () => {
       'Komandos turnyriniai taškai yra lygūs jų laimėtų setų skaičiui.',
     )
   })
+
+  test('3/2/1/0 sistema paaiškina taškus pagal setų rezultatą', () => {
+    expect(pointSystemInfo('THREE_TWO_ONE_ZERO').explanation).toContain('2:0 skiriami 3 taškai')
+    expect(pointSystemInfo('THREE_TWO_ONE_ZERO').explanation).toContain('0:2 – 0 taškų')
+  })
 })
