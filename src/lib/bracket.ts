@@ -202,16 +202,19 @@ export async function resetKnockoutProgressFromMatch(matchId: string, includeMat
     await prisma.set.deleteMany({ where: { matchId: match.id } })
 
     const resetTeams = match.round !== firstRound
+    const byeWinnerId = !resetTeams && Boolean(match.homeTeamId || match.awayTeamId) && (!match.homeTeamId || !match.awayTeamId)
+      ? (match.homeTeamId ?? match.awayTeamId)
+      : null
     await prisma.match.update({
       where: { id: match.id },
       data: {
         ...(resetTeams ? { homeTeamId: null, awayTeamId: null } : {}),
-        homeSets: null,
-        awaySets: null,
-        winnerId: null,
-        status: 'SCHEDULED',
+        homeSets: byeWinnerId ? (match.homeTeamId ? 2 : 0) : null,
+        awaySets: byeWinnerId ? (match.awayTeamId ? 2 : 0) : null,
+        winnerId: byeWinnerId,
+        status: byeWinnerId ? 'FINISHED' : 'SCHEDULED',
         startedAt: null,
-        finishedAt: null,
+        finishedAt: byeWinnerId ? new Date() : null,
       },
     })
     cleared++
@@ -252,8 +255,10 @@ export async function rebuildKnockoutProgress(tournamentId: string) {
       groupId: null,
       status: 'FINISHED',
       winnerId: { not: null },
-      homeTeamId: { not: null },
-      awayTeamId: { not: null },
+      OR: [
+        { homeTeamId: { not: null } },
+        { awayTeamId: { not: null } },
+      ],
     },
     orderBy: [{ matchOrder: 'asc' }, { matchNumber: 'asc' }],
   })
