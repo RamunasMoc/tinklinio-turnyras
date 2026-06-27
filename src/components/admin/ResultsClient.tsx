@@ -278,6 +278,7 @@ export default function ResultsClient({ tournamentId, initialMatches, setFormat,
     .filter(m => teamF==='all' || m.homeTeam?.id===teamF || m.awayTeam?.id===teamF)
     .sort((a,b) => matchSortKey(a) - matchSortKey(b))
   const pending  = visibleMatches.filter(m => m.status !== 'FINISHED')
+  const finishedMatches = visibleMatches.filter(m => m.status === 'FINISHED')
   const fillablePending = pending.filter(m => !isKO || (m.homeTeam && m.awayTeam))
   const randomFillCount = isKO ? pending.length : fillablePending.length
 
@@ -398,6 +399,19 @@ export default function ResultsClient({ tournamentId, initialMatches, setFormat,
     }
 
     setActive(null)
+    setFilling(false)
+    await refreshMatches()
+    router.refresh()
+  }
+
+  async function clearLastResult() {
+    if (!isKO) return
+    if (!confirm('Panaikinti paskutinių įvestų KO rungtynių rezultatą? Vėlesnė schemos dalis, jei reikia, bus grąžinta į neįvestą būseną.')) return
+    setFilling(true)
+    const form = new FormData()
+    form.set('action', 'clearLast')
+    form.set('isKO', 'true')
+    await fetch(`/api/tournaments/${tournamentId}/results/actions`, { method: 'POST', body: form })
     setFilling(false)
     await refreshMatches()
     router.refresh()
@@ -546,7 +560,25 @@ export default function ResultsClient({ tournamentId, initialMatches, setFormat,
           {pending.length > 0 && fillablePending.length === 0 && (
           <span className="text-sm text-gray-500 font-medium">Laukiama komandų kituose mačuose</span>
           )}
-          {matches.some(m => m.status === 'FINISHED') && (
+          {isKO && finishedMatches.length > 0 && (
+            <form
+              method="post"
+              action={`/api/tournaments/${tournamentId}/results/actions`}
+              onSubmit={e => {
+                if (typeof window !== 'undefined') {
+                  e.preventDefault()
+                  clearLastResult()
+                }
+              }}>
+              <input type="hidden" name="action" value="clearLast" />
+              <input type="hidden" name="isKO" value="true" />
+              <button type="submit" disabled={filling}
+                className="flex w-full items-center justify-center gap-2 rounded-lg border border-amber-300 bg-white px-4 py-2 text-sm font-medium text-amber-700 hover:bg-amber-50 disabled:opacity-50 sm:w-auto">
+                Atšaukti paskutinį
+              </button>
+            </form>
+          )}
+          {finishedMatches.length > 0 && (
           <form
             method="post"
             action={`/api/tournaments/${tournamentId}/results/actions`}

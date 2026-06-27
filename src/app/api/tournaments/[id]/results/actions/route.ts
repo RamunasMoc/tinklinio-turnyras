@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { advanceLoser, advanceStructuralByes, advanceWinner, assignMatchOrder, ensureDoubleElimFinalRounds, repairInitialLoserRound } from '@/lib/bracket'
+import { advanceLoser, advanceStructuralByes, advanceWinner, assignMatchOrder, clearLastKnockoutResult, ensureDoubleElimFinalRounds, rebuildKnockoutProgress, repairInitialLoserRound, resetKnockoutProgressFromMatch } from '@/lib/bracket'
 import { getParam, requireAuth } from '@/lib/middleware/auth'
 import { recalcGroupStandings, winnerFromSets } from '@/lib/tournament/standings'
 import { normalizeKOWinnerMode, rankedHomeWinsFromSeeds } from '@/lib/tournament/resultGeneration'
@@ -119,6 +119,10 @@ async function saveSets(matchId: string, sets: SetData[]) {
   })
   if (!match?.homeTeamId || !match.awayTeamId) return
 
+  if (!match.groupId && match.status === 'FINISHED') {
+    await resetKnockoutProgressFromMatch(matchId, false)
+  }
+
   await prisma.set.deleteMany({ where: { matchId } })
   await prisma.set.createMany({ data: sets.map(s => ({ ...s, matchId })) })
 
@@ -140,6 +144,7 @@ async function saveSets(matchId: string, sets: SetData[]) {
       await advanceLoser(matchId)
       await ensureDoubleElimFinalRounds(match.tournamentId)
     }
+    await rebuildKnockoutProgress(match.tournamentId)
   }
 }
 
@@ -190,6 +195,19 @@ export async function POST(req: NextRequest, ctx: any) {
     })
     const done = isKO ? realKOMatches(doneMatches) : doneMatches
     for (const match of done) await clearMatch(match.id)
+    return NextResponse.redirect(redirectTo)
+  }
+
+  if (action === 'clearLast' && isKO) {
+    await clearLastKnockoutResult(tournamentId)
+    if (tournament.config.knockoutFormat === 'DOUBLE_ELIMINATION') {
+      await ensureDoubleElimFinalRounds(tournamentId)
+      await repairInitialLoserRound(tournamentId)
+      await advanceStructuralByes(tournamentId)
+      await ensureDoubleElimFinalRounds(tournamentId)
+      await assignMatchOrder(tournamentId)
+    }
+    await rebuildKnockoutProgress(tournamentId)
     return NextResponse.redirect(redirectTo)
   }
 

@@ -2,7 +2,7 @@ import { NextRequest }           from 'next/server'
 import { prisma }                from '@/lib/prisma'
 import { withAuth, jsonOk, jsonErr, getParam } from '@/lib/middleware/auth'
 import { recalcGroupStandings, winnerFromSets } from '@/lib/tournament/standings'
-import { advanceWinner, advanceLoser, ensureDoubleElimFinalRounds } from '@/lib/bracket'
+import { advanceWinner, advanceLoser, ensureDoubleElimFinalRounds, rebuildKnockoutProgress, resetKnockoutProgressFromMatch } from '@/lib/bracket'
 import { z }                     from 'zod'
 
 const SetSchema = z.object({
@@ -33,6 +33,10 @@ export const PUT = withAuth(async (req: NextRequest, ctx: any) => {
   })
   if (!match) return jsonErr('Rungtynės nerastos', 404)
   if (match.tournamentId !== tournamentId) return jsonErr('Prieiga uždrausta', 403)
+
+  if (!match.groupId && match.status === 'FINISHED') {
+    await resetKnockoutProgressFromMatch(matchId, false)
+  }
 
   await prisma.set.deleteMany({ where: { matchId } })
 
@@ -75,6 +79,7 @@ export const PUT = withAuth(async (req: NextRequest, ctx: any) => {
       await advanceLoser(matchId)
       await ensureDoubleElimFinalRounds(tournamentId)
     }
+    await rebuildKnockoutProgress(tournamentId)
   }
 
   const updated = await prisma.match.findUnique({

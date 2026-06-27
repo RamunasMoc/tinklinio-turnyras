@@ -165,6 +165,119 @@ export async function assignMatchOrder(tournamentId: string) {
   }
 }
 
+function knockoutProgressKey(match: {
+  matchOrder: number | null
+  round: string | null
+  matchNumber: number | null
+}, hasR16: boolean) {
+  if (match.matchOrder && match.matchOrder > 0) return match.matchOrder
+  return matchWave(match.round, hasR16) * 1000 + (match.matchNumber ?? 0)
+}
+
+function firstBracketRound(matches: { round: string | null }[]) {
+  if (matches.some(match => match.round === 'R64')) return 'R64'
+  if (matches.some(match => match.round === 'R32')) return 'R32'
+  if (matches.some(match => match.round === 'R16')) return 'R16'
+  if (matches.some(match => match.round === 'QF')) return 'QF'
+  return matches[0]?.round ?? null
+}
+
+export async function resetKnockoutProgressFromMatch(matchId: string, includeMatch = false) {
+  const base = await prisma.match.findUnique({ where: { id: matchId } })
+  if (!base || base.groupId) return 0
+
+  const matches = await prisma.match.findMany({
+    where: { tournamentId: base.tournamentId, groupId: null },
+  })
+  const hasR16 = matches.some(match => match.round === 'R16')
+  const firstRound = firstBracketRound(matches)
+  const baseKey = knockoutProgressKey(base, hasR16)
+  const affected = matches.filter(match => {
+    const key = knockoutProgressKey(match, hasR16)
+    return includeMatch ? key >= baseKey : key > baseKey
+  })
+
+  let cleared = 0
+  for (const match of affected) {
+    await prisma.set.deleteMany({ where: { matchId: match.id } })
+
+    const resetTeams = match.round !== firstRound
+    await prisma.match.update({
+      where: { id: match.id },
+      data: {
+        ...(resetTeams ? { homeTeamId: null, awayTeamId: null } : {}),
+        homeSets: null,
+        awaySets: null,
+        winnerId: null,
+        status: 'SCHEDULED',
+        startedAt: null,
+        finishedAt: null,
+      },
+    })
+    cleared++
+  }
+
+  return cleared
+}
+
+export async function clearLastKnockoutResult(tournamentId: string) {
+  const matches = await prisma.match.findMany({
+    where: { tournamentId, groupId: null },
+    orderBy: [{ matchOrder: 'asc' }, { matchNumber: 'asc' }],
+  })
+  const hasR16 = matches.some(match => match.round === 'R16')
+  const finished = matches
+    .filter(match => match.status === 'FINISHED' && match.homeTeamId && match.awayTeamId && match.winnerId)
+    .sort((a, b) => knockoutProgressKey(b, hasR16) - knockoutProgressKey(a, hasR16))
+
+  const last = finished[0]
+  if (!last) return null
+
+  await resetKnockoutProgressFromMatch(last.id, true)
+  return last
+}
+
+export async function rebuildKnockoutProgress(tournamentId: string) {
+  const tournament = await prisma.tournament.findUnique({
+    where: { id: tournamentId },
+    include: { config: true },
+  })
+  if (!tournament?.config) return 0
+
+  await assignMatchOrder(tournamentId)
+
+  const matches = await prisma.match.findMany({
+    where: {
+      tournamentId,
+      groupId: null,
+      status: 'FINISHED',
+      winnerId: { not: null },
+      homeTeamId: { not: null },
+      awayTeamId: { not: null },
+    },
+    orderBy: [{ matchOrder: 'asc' }, { matchNumber: 'asc' }],
+  })
+
+  let moved = 0
+  for (const match of matches) {
+    await advanceWinner(match.id)
+    moved++
+    if (tournament.config.knockoutFormat === 'DOUBLE_ELIMINATION') {
+      await advanceLoser(match.id)
+    }
+  }
+
+  if (tournament.config.knockoutFormat === 'DOUBLE_ELIMINATION') {
+    moved += await ensureDoubleElimFinalRounds(tournamentId)
+    moved += await repairInitialLoserRound(tournamentId)
+    moved += await advanceStructuralByes(tournamentId)
+    moved += await ensureDoubleElimFinalRounds(tournamentId)
+  }
+
+  await assignMatchOrder(tournamentId)
+  return moved
+}
+
 // ─── Komandų surinkimas ir rikiavimas ─────────────────────────
 
 function safeRatio(a: number, b: number): number {
