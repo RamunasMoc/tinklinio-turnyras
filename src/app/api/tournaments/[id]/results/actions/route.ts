@@ -119,10 +119,6 @@ async function saveSets(matchId: string, sets: SetData[]) {
   })
   if (!match?.homeTeamId || !match.awayTeamId) return
 
-  if (!match.groupId && match.status === 'FINISHED') {
-    await resetKnockoutProgressFromMatch(matchId, false)
-  }
-
   await prisma.set.deleteMany({ where: { matchId } })
   await prisma.set.createMany({ data: sets.map(s => ({ ...s, matchId })) })
 
@@ -130,6 +126,12 @@ async function saveSets(matchId: string, sets: SetData[]) {
   const homeSets = mainSets.filter(s => s.homeScore > s.awayScore).length
   const awaySets = mainSets.filter(s => s.awayScore > s.homeScore).length
   const winnerId = winnerFromSets(sets, match.homeTeamId, match.awayTeamId)
+  const winnerChanged = !match.groupId && match.status === 'FINISHED' && match.winnerId !== winnerId
+  const shouldPropagateKO = !match.groupId && !!winnerId && (match.status !== 'FINISHED' || winnerChanged)
+
+  if (winnerChanged) {
+    await resetKnockoutProgressFromMatch(matchId, false)
+  }
 
   await prisma.match.update({
     where: { id: matchId },
@@ -138,7 +140,7 @@ async function saveSets(matchId: string, sets: SetData[]) {
 
   if (match.groupId) {
     await recalcGroupStandings(match.groupId)
-  } else if (winnerId) {
+  } else if (shouldPropagateKO) {
     await advanceWinner(matchId)
     if (match.tournament.config?.knockoutFormat === 'DOUBLE_ELIMINATION') {
       await advanceLoser(matchId)

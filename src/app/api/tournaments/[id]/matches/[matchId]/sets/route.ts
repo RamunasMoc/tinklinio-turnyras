@@ -34,14 +34,13 @@ export const PUT = withAuth(async (req: NextRequest, ctx: any) => {
   if (!match) return jsonErr('Rungtynės nerastos', 404)
   if (match.tournamentId !== tournamentId) return jsonErr('Prieiga uždrausta', 403)
 
-  if (!match.groupId && match.status === 'FINISHED') {
-    await resetKnockoutProgressFromMatch(matchId, false)
-  }
-
   await prisma.set.deleteMany({ where: { matchId } })
 
   // sets: [] — išvalyti rezultatus
   if (sets.length === 0) {
+    if (!match.groupId && match.status === 'FINISHED') {
+      await resetKnockoutProgressFromMatch(matchId, false)
+    }
     await prisma.match.update({
       where: { id: matchId },
       data:  { homeSets: null, awaySets: null, winnerId: null,
@@ -61,6 +60,12 @@ export const PUT = withAuth(async (req: NextRequest, ctx: any) => {
   const awaySets = mainSets.filter(s => s.awayScore > s.homeScore).length
 
   const winnerId = winnerFromSets(sets, match.homeTeamId, match.awayTeamId)
+  const winnerChanged = !match.groupId && match.status === 'FINISHED' && match.winnerId !== winnerId
+  const shouldPropagateKO = !match.groupId && !!winnerId && (match.status !== 'FINISHED' || winnerChanged)
+
+  if (winnerChanged) {
+    await resetKnockoutProgressFromMatch(matchId, false)
+  }
 
   await prisma.match.update({
     where: { id: matchId },
@@ -72,7 +77,7 @@ export const PUT = withAuth(async (req: NextRequest, ctx: any) => {
   })
 
   if (match.groupId) await recalcGroupStandings(match.groupId)
-  if (!match.groupId && winnerId) {
+  if (shouldPropagateKO) {
     await advanceWinner(matchId)
     // DE formate: WB pralaimėtojas patenka į LB
     if (match.tournament?.config?.knockoutFormat === 'DOUBLE_ELIMINATION') {
