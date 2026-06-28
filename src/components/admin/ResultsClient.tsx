@@ -77,7 +77,19 @@ function rankedHomeWins(match: Match): boolean | undefined {
   return rankedHomeWinsFromSeeds(match.homeTeam?.seedRank, match.awayTeam?.seedRank)
 }
 
+function isCustom12DoubleElim(matches: any[]) {
+  const count = (round: string) => matches.filter((m: any) => m.round === round).length
+  return count('R16') === 4 && count('QF') === 4 && count('SF') === 2 &&
+    count('LB-R1') === 4 && count('LB-R2') === 2 && count('LB-R3') === 2 &&
+    count('LB-R4') === 2 && count('GF') === 1 && count('F') === 0 &&
+    count('LB-F') === 0 && count('LB-SF') === 0
+}
+
 function realKOMatches(matches: Match[]) {
+  if (isCustom12DoubleElim(matches)) {
+    return matches.filter((m: any) => !(m.status === 'FINISHED' && (!m.homeTeam || !m.awayTeam)))
+  }
+
   const hasWBFinal = matches.some((m: any) => m.round === 'F')
   const hasLBFinal = matches.some((m: any) => m.round === 'LB-F')
   const hasTeam = (m: any, side: 'home' | 'away') =>
@@ -248,7 +260,20 @@ export default function ResultsClient({ tournamentId, initialMatches, setFormat,
     '3rd':8,
     GF:9,
   }
-  const roundWave = matches.some(m => m.round === 'R16') ? ROUND_WAVE_16 : ROUND_WAVE_8
+  const ROUND_WAVE_12_CUSTOM: Record<string,number> = {
+    R16:1,
+    QF:2,
+    'LB-R1':3,
+    SF:4,
+    'LB-R2':5,
+    'LB-R3':6,
+    'LB-R4':7,
+    '3rd':8,
+    GF:9,
+  }
+  const roundWave = isCustom12DoubleElim(matches)
+    ? ROUND_WAVE_12_CUSTOM
+    : matches.some(m => m.round === 'R16') ? ROUND_WAVE_16 : ROUND_WAVE_8
   const waveOf = (round: string | null | undefined, waveMap = roundWave) => {
     if (round?.startsWith('RR')) {
       const n = Number(round.slice(2))
@@ -442,7 +467,9 @@ export default function ResultsClient({ tournamentId, initialMatches, setFormat,
         const data = await res.json()
         if (!data.ok) break
         const freshMatches = realKOMatches(data.data as Match[]) as any[]
-        const freshRoundWave = freshMatches.some(m => m.round === 'R16') ? ROUND_WAVE_16 : ROUND_WAVE_8
+        const freshRoundWave = isCustom12DoubleElim(freshMatches)
+          ? ROUND_WAVE_12_CUSTOM
+          : freshMatches.some(m => m.round === 'R16') ? ROUND_WAVE_16 : ROUND_WAVE_8
         const freshWaveOf = (round: string | null | undefined) => {
           if (round?.startsWith('RR')) {
             const n = Number(round.slice(2))

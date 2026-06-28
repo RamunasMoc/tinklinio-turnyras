@@ -3,7 +3,7 @@
 // FIVB paplūdimio tinklinio braket sistemos:
 //   SINGLE_ELIMINATION — standartinis vieno pralaimėjimo
 //   LUCKY_LOSER        — FIVB oficiali: LL raundas + single elim
-//   DOUBLE_ELIMINATION — klasikinis dviejų pralaimėjimų
+//   DOUBLE_ELIMINATION — dviejų pralaimėjimų, su atskira 12 komandų custom schema
 //   ROUND_ROBIN        — viena finalinė grupė, visi su visais
 // ============================================================
 
@@ -47,6 +47,18 @@ const MATCH_WAVE_8: Record<string, number> = {
   GF:      9,
 }
 
+const MATCH_WAVE_12_CUSTOM: Record<string, number> = {
+  R16:     1,
+  QF:      2,
+  'LB-R1': 3,
+  SF:      4,
+  'LB-R2': 5,
+  'LB-R3': 6,
+  'LB-R4': 7,
+  '3rd':   8,
+  GF:      9,
+}
+
 function matchWave(round: string | null, hasR16: boolean) {
   if (round?.startsWith('RR')) {
     const n = Number(round.slice(2))
@@ -54,6 +66,37 @@ function matchWave(round: string | null, hasR16: boolean) {
   }
   const waveMap = hasR16 ? MATCH_WAVE_16 : MATCH_WAVE_8
   return waveMap[round ?? ''] ?? 99
+}
+
+export function isCustom12DoubleElimMatches(matches: { round: string | null }[]) {
+  const count = (round: string) => matches.filter(m => m.round === round).length
+  return (
+    count('R16') === 4 &&
+    count('QF') === 4 &&
+    count('SF') === 2 &&
+    count('LB-R1') === 4 &&
+    count('LB-R2') === 2 &&
+    count('LB-R3') === 2 &&
+    count('LB-R4') === 2 &&
+    count('3rd') <= 1 &&
+    count('GF') === 1 &&
+    count('F') === 0 &&
+    count('LB-F') === 0 &&
+    count('LB-SF') === 0
+  )
+}
+
+function knockoutWaveMap(matches: { round: string | null }[]) {
+  if (isCustom12DoubleElimMatches(matches)) return MATCH_WAVE_12_CUSTOM
+  return matches.some(match => match.round === 'R16') ? MATCH_WAVE_16 : MATCH_WAVE_8
+}
+
+async function isCustom12DoubleElimTournament(tournamentId: string) {
+  const matches = await prisma.match.findMany({
+    where: { tournamentId, groupId: null },
+    select: { round: true },
+  })
+  return isCustom12DoubleElimMatches(matches)
 }
 
 // ─── Pagrindinė funkcija ──────────────────────────────────────
@@ -109,9 +152,13 @@ export async function generateBracket(tournamentId: string) {
     if (qualified.length > 16) {
       throw new Error('Dviejų minusų sistema palaiko iki 16 komandų')
     }
-    const size      = qualified.length <= 8 ? 8 : 16
     await saveSeedRanks(qualified)
-    await createDoubleElimBracket(tournamentId, qualified, size, cfg)
+    if (qualified.length === 12) {
+      await createCustom12DoubleElimBracket(tournamentId, qualified, cfg)
+    } else {
+      const size = qualified.length <= 8 ? 8 : 16
+      await createDoubleElimBracket(tournamentId, qualified, size, cfg)
+    }
   } else if (format === 'ROUND_ROBIN') {
     const qualified = getQualifiedTeams(
       groupsWithCount,
@@ -150,10 +197,10 @@ export async function assignMatchOrder(tournamentId: string) {
   const matches = await prisma.match.findMany({
     where:   { tournamentId, groupId: null },
   })
-  const hasR16 = matches.some(m => m.round === 'R16')
+  const waveMap = knockoutWaveMap(matches)
   const sorted = [...matches].sort((a, b) => {
-    const aw = matchWave(a.round, hasR16)
-    const bw = matchWave(b.round, hasR16)
+    const aw = waveMap[a.round ?? ''] ?? matchWave(a.round, matches.some(m => m.round === 'R16'))
+    const bw = waveMap[b.round ?? ''] ?? matchWave(b.round, matches.some(m => m.round === 'R16'))
     if (aw !== bw) return aw - bw
     return (a.matchNumber ?? 0) - (b.matchNumber ?? 0)
   })
@@ -169,9 +216,9 @@ function knockoutProgressKey(match: {
   matchOrder: number | null
   round: string | null
   matchNumber: number | null
-}, hasR16: boolean) {
+}, waveMap: Record<string, number>) {
   if (match.matchOrder && match.matchOrder > 0) return match.matchOrder
-  return matchWave(match.round, hasR16) * 1000 + (match.matchNumber ?? 0)
+  return (waveMap[match.round ?? ''] ?? 99) * 1000 + (match.matchNumber ?? 0)
 }
 
 function firstBracketRound(matches: { round: string | null }[]) {
@@ -189,11 +236,12 @@ export async function resetKnockoutProgressFromMatch(matchId: string, includeMat
   const matches = await prisma.match.findMany({
     where: { tournamentId: base.tournamentId, groupId: null },
   })
-  const hasR16 = matches.some(match => match.round === 'R16')
+  const waveMap = knockoutWaveMap(matches)
+  const custom12 = isCustom12DoubleElimMatches(matches)
   const firstRound = firstBracketRound(matches)
-  const baseKey = knockoutProgressKey(base, hasR16)
+  const baseKey = knockoutProgressKey(base, waveMap)
   const affected = matches.filter(match => {
-    const key = knockoutProgressKey(match, hasR16)
+    const key = knockoutProgressKey(match, waveMap)
     return includeMatch ? key >= baseKey : key > baseKey
   })
 
@@ -202,13 +250,21 @@ export async function resetKnockoutProgressFromMatch(matchId: string, includeMat
     await prisma.set.deleteMany({ where: { matchId: match.id } })
 
     const resetTeams = match.round !== firstRound
+    const keepCustom12FixedQFHome = custom12 && match.round === 'QF' && [1, 3].includes(match.matchNumber ?? 0)
+    const keepCustom12FixedQFAway = custom12 && match.round === 'QF' && [2, 4].includes(match.matchNumber ?? 0)
+    const teamResetData = resetTeams
+      ? {
+          ...(keepCustom12FixedQFHome ? {} : { homeTeamId: null }),
+          ...(keepCustom12FixedQFAway ? {} : { awayTeamId: null }),
+        }
+      : {}
     const byeWinnerId = !resetTeams && Boolean(match.homeTeamId || match.awayTeamId) && (!match.homeTeamId || !match.awayTeamId)
       ? (match.homeTeamId ?? match.awayTeamId)
       : null
     await prisma.match.update({
       where: { id: match.id },
       data: {
-        ...(resetTeams ? { homeTeamId: null, awayTeamId: null } : {}),
+        ...teamResetData,
         homeSets: byeWinnerId ? (match.homeTeamId ? 2 : 0) : null,
         awaySets: byeWinnerId ? (match.awayTeamId ? 2 : 0) : null,
         winnerId: byeWinnerId,
@@ -228,10 +284,10 @@ export async function clearLastKnockoutResult(tournamentId: string) {
     where: { tournamentId, groupId: null },
     orderBy: [{ matchOrder: 'asc' }, { matchNumber: 'asc' }],
   })
-  const hasR16 = matches.some(match => match.round === 'R16')
+  const waveMap = knockoutWaveMap(matches)
   const finished = matches
     .filter(match => match.status === 'FINISHED' && match.homeTeamId && match.awayTeamId && match.winnerId)
-    .sort((a, b) => knockoutProgressKey(b, hasR16) - knockoutProgressKey(a, hasR16))
+    .sort((a, b) => knockoutProgressKey(b, waveMap) - knockoutProgressKey(a, waveMap))
 
   const last = finished[0]
   if (!last) return null
@@ -921,6 +977,60 @@ async function createDoubleElimBracket(
   }
 }
 
+async function createCustom12DoubleElimBracket(
+  tournamentId: string,
+  teams:        BracketTeam[],
+  cfg:          any,
+) {
+  if (teams.length !== 12) {
+    throw new Error('12 komandų custom schema galima tik tiksliai 12 komandų')
+  }
+
+  const seed = (n: number) => teams[n - 1] ?? null
+  const createMatch = async (
+    round: string,
+    matchNumber: number,
+    home?: BracketTeam | null,
+    away?: BracketTeam | null,
+  ) => prisma.match.create({
+    data: {
+      tournamentId,
+      round,
+      matchNumber,
+      homeTeamId: home?.tournamentTeamId ?? null,
+      awayTeamId: away?.tournamentTeamId ?? null,
+      status: 'SCHEDULED',
+    },
+  })
+
+  // #1-#4: 5-12 reitingo komandos pradeda iš 1/8 lapelių.
+  await createMatch('R16', 1, seed(8), seed(9))
+  await createMatch('R16', 2, seed(5), seed(12))
+  await createMatch('R16', 3, seed(6), seed(11))
+  await createMatch('R16', 4, seed(7), seed(10))
+
+  // #5-#8: keturios aukščiausios komandos įsijungia į sekančią WB pakopą.
+  await createMatch('QF', 1, seed(1), null)
+  await createMatch('QF', 2, null, seed(4))
+  await createMatch('QF', 3, seed(3), null)
+  await createMatch('QF', 4, null, seed(2))
+
+  // #13-#14: WB pusfinaliai.
+  await createMatch('SF', 1)
+  await createMatch('SF', 2)
+
+  // #9-#20: pralaimėtojų pusė pagal 12 komandų lapelio schemą.
+  for (let i = 1; i <= 4; i++) await createMatch('LB-R1', i)
+  for (let i = 1; i <= 2; i++) await createMatch('LB-R2', i)
+  for (let i = 1; i <= 2; i++) await createMatch('LB-R3', i)
+  for (let i = 1; i <= 2; i++) await createMatch('LB-R4', i)
+
+  if (cfg.thirdPlaceMatch !== false) {
+    await createMatch('3rd', 1)
+  }
+  await createMatch('GF', 1)
+}
+
 // ─── Pagalbinės funkcijos ─────────────────────────────────────
 
 function nextPowerOf2(n: number): number {
@@ -1020,6 +1130,25 @@ function getDoubleElimLoserDestination(round: string, matchNumber: number, hasR1
 }
 
 export async function repairInitialLoserRound(tournamentId: string) {
+  if (await isCustom12DoubleElimTournament(tournamentId)) {
+    const wbMatches = await prisma.match.findMany({
+      where: {
+        tournamentId,
+        groupId: null,
+        round: { in: ['R16', 'QF', 'SF', 'LB-R4'] },
+        status: 'FINISHED',
+        winnerId: { not: null },
+      },
+      orderBy: [{ matchOrder: 'asc' }, { matchNumber: 'asc' }],
+    })
+    let moved = 0
+    for (const m of wbMatches) {
+      await advanceCustom12Loser(m)
+      moved++
+    }
+    return moved
+  }
+
   const hasR16 = await hasR16Round(tournamentId)
   const wbToLb = hasR16 ? WB_TO_LB_16 : WB_TO_LB_8
   const wbMatches = await prisma.match.findMany({
@@ -1085,6 +1214,8 @@ export async function repairInitialLoserRound(tournamentId: string) {
 }
 
 export async function ensureDoubleElimFinalRounds(tournamentId: string) {
+  if (await isCustom12DoubleElimTournament(tournamentId)) return 0
+
   let moved = 0
 
   const sfCount = await prisma.match.count({
@@ -1235,6 +1366,8 @@ async function syncDoubleElimThirdPlaceMatch(tournamentId: string) {
 }
 
 export async function advanceStructuralByes(tournamentId: string) {
+  if (await isCustom12DoubleElimTournament(tournamentId)) return 0
+
   let moved = 0
 
   for (let i = 0; i < 20; i++) {
@@ -1320,9 +1453,119 @@ export async function advanceStructuralByes(tournamentId: string) {
   return moved
 }
 
+function custom12WinnerDestination(round: string, matchNumber: number): {
+  round: string
+  matchNumber: number
+  slot: 'homeTeamId' | 'awayTeamId'
+} | null {
+  switch (round) {
+    case 'R16':
+      return {
+        round: 'QF',
+        matchNumber,
+        slot: matchNumber === 1 || matchNumber === 3 ? 'awayTeamId' : 'homeTeamId',
+      }
+    case 'QF':
+      return {
+        round: 'SF',
+        matchNumber: Math.ceil(matchNumber / 2),
+        slot: matchNumber % 2 === 1 ? 'homeTeamId' : 'awayTeamId',
+      }
+    case 'SF':
+      return { round: 'LB-R4', matchNumber, slot: 'homeTeamId' }
+    case 'LB-R1':
+      if (matchNumber === 4) return { round: 'LB-R2', matchNumber: 1, slot: 'homeTeamId' }
+      if (matchNumber === 3) return { round: 'LB-R2', matchNumber: 1, slot: 'awayTeamId' }
+      if (matchNumber === 2) return { round: 'LB-R2', matchNumber: 2, slot: 'homeTeamId' }
+      return { round: 'LB-R2', matchNumber: 2, slot: 'awayTeamId' }
+    case 'LB-R2':
+      return { round: 'LB-R3', matchNumber, slot: 'awayTeamId' }
+    case 'LB-R3':
+      return { round: 'LB-R4', matchNumber, slot: 'awayTeamId' }
+    case 'LB-R4':
+      return { round: 'GF', matchNumber: 1, slot: matchNumber === 1 ? 'homeTeamId' : 'awayTeamId' }
+    default:
+      return null
+  }
+}
+
+function custom12LoserDestination(round: string, matchNumber: number): {
+  round: string
+  matchNumber: number
+  slot: 'homeTeamId' | 'awayTeamId'
+} | null {
+  switch (round) {
+    case 'R16':
+      return { round: 'LB-R1', matchNumber: 5 - matchNumber, slot: 'homeTeamId' }
+    case 'QF':
+      return { round: 'LB-R1', matchNumber, slot: 'awayTeamId' }
+    case 'SF':
+      return { round: 'LB-R3', matchNumber: matchNumber === 1 ? 2 : 1, slot: 'homeTeamId' }
+    case 'LB-R4':
+      return { round: '3rd', matchNumber: 1, slot: matchNumber === 1 ? 'homeTeamId' : 'awayTeamId' }
+    default:
+      return null
+  }
+}
+
+async function advanceCustom12Winner(match: {
+  tournamentId: string
+  round: string | null
+  matchNumber: number | null
+  winnerId: string | null
+}) {
+  if (!match.winnerId || !match.round) return
+  const destination = custom12WinnerDestination(match.round, match.matchNumber ?? 1)
+  if (!destination) return
+  const nextMatch = await prisma.match.findFirst({
+    where: {
+      tournamentId: match.tournamentId,
+      round: destination.round,
+      matchNumber: destination.matchNumber,
+    },
+  })
+  if (!nextMatch) return
+  await prisma.match.update({
+    where: { id: nextMatch.id },
+    data: { [destination.slot]: match.winnerId },
+  })
+}
+
+async function advanceCustom12Loser(match: {
+  tournamentId: string
+  round: string | null
+  matchNumber: number | null
+  winnerId: string | null
+  homeTeamId: string | null
+  awayTeamId: string | null
+}) {
+  if (!match.winnerId || !match.round) return
+  const loserId = match.winnerId === match.homeTeamId ? match.awayTeamId : match.homeTeamId
+  if (!loserId) return
+  const destination = custom12LoserDestination(match.round, match.matchNumber ?? 1)
+  if (!destination) return
+  const target = await prisma.match.findFirst({
+    where: {
+      tournamentId: match.tournamentId,
+      round: destination.round,
+      matchNumber: destination.matchNumber,
+    },
+  })
+  if (!target) return
+  await prisma.match.update({
+    where: { id: target.id },
+    data: { [destination.slot]: loserId },
+  })
+}
+
 export async function advanceLoser(matchId: string) {
   const match = await prisma.match.findUnique({ where: { id: matchId } })
   if (!match?.winnerId || !match.round) return
+
+  if (await isCustom12DoubleElimTournament(match.tournamentId)) {
+    await advanceCustom12Loser(match)
+    return
+  }
 
   const loserId = match.winnerId === match.homeTeamId
     ? match.awayTeamId
@@ -1402,6 +1645,11 @@ export async function advanceWinner(matchId: string) {
 
   if (format === 'LUCKY_LOSER' && match.round === 'LL') {
     await advanceLuckyLoserWinner(match)
+    return
+  }
+
+  if (format === 'DOUBLE_ELIMINATION' && await isCustom12DoubleElimTournament(match.tournamentId)) {
+    await advanceCustom12Winner(match)
     return
   }
 

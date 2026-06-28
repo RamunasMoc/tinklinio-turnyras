@@ -1,4 +1,4 @@
-import { getQualifiedTeams } from '@/lib/bracket'
+import { getQualifiedTeams, isCustom12DoubleElimMatches } from '@/lib/bracket'
 
 function tt(id: string, name: string, points: number, wins: number) {
   return {
@@ -52,5 +52,41 @@ describe('getQualifiedTeams', () => {
       'c1',
       'a2',
     ])
+  })
+})
+
+describe('isCustom12DoubleElimMatches', () => {
+  const rounds = (counts: Record<string, number>) =>
+    Object.entries(counts).flatMap(([round, count]) =>
+      Array.from({ length: count }, () => ({ round }))
+    )
+
+  it('recognizes only the 12-team custom double elimination shape', () => {
+    expect(isCustom12DoubleElimMatches(rounds({
+      R16: 4,
+      QF: 4,
+      SF: 2,
+      'LB-R1': 4,
+      'LB-R2': 2,
+      'LB-R3': 2,
+      'LB-R4': 2,
+      '3rd': 1,
+      GF: 1,
+    }))).toBe(true)
+
+    expect(isCustom12DoubleElimMatches(rounds({
+      R16: 8,
+      QF: 4,
+      SF: 2,
+      F: 1,
+      'LB-R1': 4,
+      'LB-R2': 4,
+      'LB-R3': 2,
+      'LB-R4': 2,
+      'LB-SF': 1,
+      'LB-F': 1,
+      '3rd': 1,
+      GF: 1,
+    }))).toBe(false)
   })
 })

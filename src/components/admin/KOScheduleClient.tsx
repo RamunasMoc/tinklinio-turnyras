@@ -46,7 +46,28 @@ const ROUND_WAVE_8: Record<string, number> = {
   GF:      9,
 }
 
+const ROUND_WAVE_12_CUSTOM: Record<string, number> = {
+  R16: 1,
+  QF: 2,
+  'LB-R1': 3,
+  SF: 4,
+  'LB-R2': 5,
+  'LB-R3': 6,
+  'LB-R4': 7,
+  '3rd': 8,
+  GF: 9,
+}
+
+function isCustom12DoubleElim(matches: any[]) {
+  const count = (round: string) => matches.filter(m => m.round === round).length
+  return count('R16') === 4 && count('QF') === 4 && count('SF') === 2 &&
+    count('LB-R1') === 4 && count('LB-R2') === 2 && count('LB-R3') === 2 &&
+    count('LB-R4') === 2 && count('GF') === 1 && count('F') === 0 &&
+    count('LB-F') === 0 && count('LB-SF') === 0
+}
+
 function getRoundWave(matches: any[]) {
+  if (isCustom12DoubleElim(matches)) return ROUND_WAVE_12_CUSTOM
   return matches.some(m => m.round === 'R16') ? ROUND_WAVE_16 : ROUND_WAVE_8
 }
 
@@ -59,6 +80,10 @@ function roundWaveValue(round: string | null | undefined, waveMap: Record<string
 }
 
 function realKOMatches(matches: any[]) {
+  if (isCustom12DoubleElim(matches)) {
+    return matches.filter(m => !(m.status === 'FINISHED' && (!m.homeTeamId || !m.awayTeamId)))
+  }
+
   const hasWBFinal = matches.some(m => m.round === 'F')
   const hasLBFinal = matches.some(m => m.round === 'LB-F')
   const loserSourceCount = (matchNumber: number | null) => {
@@ -81,9 +106,52 @@ function realKOMatches(matches: any[]) {
 function matchCode(round: string|null, matchNum: number|null, side: 'home'|'away', allMatches: any[]): string {
   if (!round || matchNum === null) return 'TBD'
 
+  const custom12 = isCustom12DoubleElim(allMatches)
   const isEightTeamSheet = !allMatches.some(m => m.round === 'R16') && allMatches.some(m => m.round === 'QF')
   const hasLbFinal = allMatches.some(m => m.round === 'LB-F')
   const swapPair = (n: number) => n % 2 === 1 ? n + 1 : n - 1
+  if (custom12) {
+    const orderOf = (sourceRound: string, sourceMatch: number, fallback: number) =>
+      allMatches.find(m => m.round === sourceRound && m.matchNumber === sourceMatch)?.matchOrder ?? fallback
+    if (round === 'QF') {
+      if (matchNum === 1 && side === 'away') return `M${orderOf('R16', 1, 1)} laimėt.`
+      if (matchNum === 2 && side === 'home') return `M${orderOf('R16', 2, 2)} laimėt.`
+      if (matchNum === 3 && side === 'away') return `M${orderOf('R16', 3, 3)} laimėt.`
+      if (matchNum === 4 && side === 'home') return `M${orderOf('R16', 4, 4)} laimėt.`
+    }
+    if (round === 'SF') {
+      const sourceM = matchNum * 2 - (side === 'home' ? 1 : 0)
+      return `M${orderOf('QF', sourceM, 4 + sourceM)} laimėt.`
+    }
+    if (round === 'LB-R1') {
+      const homeSources: Record<number, number> = { 1: 4, 2: 3, 3: 2, 4: 1 }
+      if (side === 'home') {
+        const sourceM = homeSources[matchNum] ?? matchNum
+        return `M${orderOf('R16', sourceM, sourceM)} pralaimėt.`
+      }
+      return `M${orderOf('QF', matchNum, 4 + matchNum)} pralaimėt.`
+    }
+    if (round === 'LB-R2') {
+      const sourceM = side === 'home'
+        ? (matchNum === 1 ? 4 : 2)
+        : (matchNum === 1 ? 3 : 1)
+      return `M${orderOf('LB-R1', sourceM, 8 + sourceM)} laimėt.`
+    }
+    if (round === 'LB-R3') {
+      if (side === 'home') {
+        const sourceM = matchNum === 1 ? 2 : 1
+        return `M${orderOf('SF', sourceM, 12 + sourceM)} pralaimėt.`
+      }
+      return `M${orderOf('LB-R2', matchNum, 14 + matchNum)} laimėt.`
+    }
+    if (round === 'LB-R4') {
+      return side === 'home'
+        ? `M${orderOf('SF', matchNum, 12 + matchNum)} laimėt.`
+        : `M${orderOf('LB-R3', matchNum, 16 + matchNum)} laimėt.`
+    }
+    if (round === '3rd') return side === 'home' ? 'M19 pralaimėt.' : 'M20 pralaimėt.'
+    if (round === 'GF') return side === 'home' ? 'M19 laimėt.' : 'M20 laimėt.'
+  }
   if (round === '3rd') {
     if (hasLbFinal) return side === 'home' ? 'LB Pusfin. pralaimėt.' : 'LB Finalas pralaimėt.'
     return side === 'home' ? 'SF1 pralaimėtojas' : 'SF2 pralaimėtojas'

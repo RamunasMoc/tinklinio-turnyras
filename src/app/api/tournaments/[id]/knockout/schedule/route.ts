@@ -30,7 +30,28 @@ const ROUND_WAVE_8: Record<string, number> = {
   GF:      9,
 }
 
+const ROUND_WAVE_12_CUSTOM: Record<string, number> = {
+  R16: 1,
+  QF: 2,
+  'LB-R1': 3,
+  SF: 4,
+  'LB-R2': 5,
+  'LB-R3': 6,
+  'LB-R4': 7,
+  '3rd': 8,
+  GF: 9,
+}
+
+function isCustom12DoubleElim(matches: any[]) {
+  const count = (round: string) => matches.filter(m => m.round === round).length
+  return count('R16') === 4 && count('QF') === 4 && count('SF') === 2 &&
+    count('LB-R1') === 4 && count('LB-R2') === 2 && count('LB-R3') === 2 &&
+    count('LB-R4') === 2 && count('GF') === 1 && count('F') === 0 &&
+    count('LB-F') === 0 && count('LB-SF') === 0
+}
+
 function getRoundWave(matches: any[]) {
+  if (isCustom12DoubleElim(matches)) return ROUND_WAVE_12_CUSTOM
   return matches.some(m => m.round === 'R16') ? ROUND_WAVE_16 : ROUND_WAVE_8
 }
 
@@ -49,6 +70,10 @@ function roundToQuarterHour(d: Date) {
 }
 
 function realKOMatches(matches: any[]) {
+  if (isCustom12DoubleElim(matches)) {
+    return matches.filter(m => !(m.status === 'FINISHED' && (!m.homeTeamId || !m.awayTeamId)))
+  }
+
   const hasWBFinal = matches.some(m => m.round === 'F')
   const hasLBFinal = matches.some(m => m.round === 'LB-F')
   const loserSourceCount = (matchNumber: number | null) => {

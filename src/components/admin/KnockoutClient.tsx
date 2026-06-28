@@ -102,9 +102,18 @@ function roundRobinStandings(matches: any[]) {
 
 // ─── Double Elimination Braket diagrama ──────────────────────
 
+function isCustom12DoubleElim(matches: any[]) {
+  const count = (round: string) => matches.filter((m: any) => m.round === round).length
+  return count('R16') === 4 && count('QF') === 4 && count('SF') === 2 &&
+    count('LB-R1') === 4 && count('LB-R2') === 2 && count('LB-R3') === 2 &&
+    count('LB-R4') === 2 && count('GF') === 1 && count('F') === 0 &&
+    count('LB-F') === 0 && count('LB-SF') === 0
+}
+
 function isNoGameMatch(m: any, allMatches: any[]) {
   if (!m) return true
   if (m.status === 'FINISHED' && (!m.homeTeamId || !m.awayTeamId)) return true
+  if (isCustom12DoubleElim(allMatches)) return false
   if (m.round === 'LB-R1') {
     const firstRound = allMatches.some((candidate: any) => candidate.round === 'R16') ? 'R16' : 'QF'
     const sourceNumbers = [(m.matchNumber ?? 1) * 2 - 1, (m.matchNumber ?? 1) * 2]
@@ -320,10 +329,56 @@ export function ExampleDEBracket({ matches }: { matches: any[] }) {
   function fallbackSourceLabel(m: any, slot: 'home' | 'away') {
     if (!m?.round || m.round === 'R16') return null
     const mn = m.matchNumber ?? 1
+    const isCustom12Sheet = isCustom12DoubleElim(matches)
     const isEightTeamSheet = matches.some((candidate: any) => candidate.round === 'QF') && !matches.some((candidate: any) => candidate.round === 'R16')
     const swapPair = (n: number) => n % 2 === 1 ? n + 1 : n - 1
     const from = (type: 'W' | 'L', round: string, matchNumber: number, fallback: number) =>
       `${type}${displayOrder(round, matchNumber, fallback)}`
+
+    if (isCustom12Sheet) {
+      if (m.round === 'QF') {
+        if (mn === 1) return slot === 'away' ? from('W', 'R16', 1, 1) : null
+        if (mn === 2) return slot === 'home' ? from('W', 'R16', 2, 2) : null
+        if (mn === 3) return slot === 'away' ? from('W', 'R16', 3, 3) : null
+        if (mn === 4) return slot === 'home' ? from('W', 'R16', 4, 4) : null
+      }
+      if (m.round === 'SF') {
+        return slot === 'home'
+          ? from('W', 'QF', mn * 2 - 1, 4 + mn * 2 - 1)
+          : from('W', 'QF', mn * 2, 4 + mn * 2)
+      }
+      if (m.round === 'LB-R1') {
+        const homeSources: Record<number, number> = { 1: 4, 2: 3, 3: 2, 4: 1 }
+        return slot === 'home'
+          ? from('L', 'R16', homeSources[mn] ?? mn, homeSources[mn] ?? mn)
+          : from('L', 'QF', mn, 4 + mn)
+      }
+      if (m.round === 'LB-R2') {
+        return slot === 'home'
+          ? from('W', 'LB-R1', mn === 1 ? 4 : 2, mn === 1 ? 12 : 10)
+          : from('W', 'LB-R1', mn === 1 ? 3 : 1, mn === 1 ? 11 : 9)
+      }
+      if (m.round === 'LB-R3') {
+        return slot === 'home'
+          ? from('L', 'SF', mn === 1 ? 2 : 1, mn === 1 ? 14 : 13)
+          : from('W', 'LB-R2', mn, 14 + mn)
+      }
+      if (m.round === 'LB-R4') {
+        return slot === 'home'
+          ? from('W', 'SF', mn, 12 + mn)
+          : from('W', 'LB-R3', mn, 16 + mn)
+      }
+      if (m.round === '3rd') {
+        return slot === 'home'
+          ? from('L', 'LB-R4', 1, 19)
+          : from('L', 'LB-R4', 2, 20)
+      }
+      if (m.round === 'GF') {
+        return slot === 'home'
+          ? from('W', 'LB-R4', 1, 19)
+          : from('W', 'LB-R4', 2, 20)
+      }
+    }
 
     if (m.round === 'QF') {
       return slot === 'home'
@@ -479,6 +534,41 @@ export function ExampleDEBracket({ matches }: { matches: any[] }) {
 
   function existingItems(items: ({ m: any; label: string } | null)[]) {
     return items.filter(Boolean) as { m: any; label: string }[]
+  }
+
+  const isCustom12Sheet = isCustom12DoubleElim(matches)
+  if (isCustom12Sheet) {
+    const wbR16Custom = existingItems(Array.from({ length: 4 }, (_, i) => existingItem('R16', i + 1, String(i + 1))))
+    const wbQFCustom = existingItems(Array.from({ length: 4 }, (_, i) => existingItem('QF', i + 1, String(5 + i))))
+    const wbSFCustom = existingItems(Array.from({ length: 2 }, (_, i) => existingItem('SF', i + 1, String(13 + i))))
+    const lbR1Custom = existingItems([4, 3, 2, 1].map((n, i) => existingItem('LB-R1', n, String(12 - i))))
+    const lbR2Custom = existingItems(Array.from({ length: 2 }, (_, i) => existingItem('LB-R2', i + 1, String(15 + i))))
+    const lbR3Custom = existingItems(Array.from({ length: 2 }, (_, i) => existingItem('LB-R3', i + 1, String(17 + i))))
+    const lbR4Custom = existingItems(Array.from({ length: 2 }, (_, i) => existingItem('LB-R4', i + 1, String(19 + i))))
+    const finalsCustom = existingItems([
+      existingItem('3rd', 1, '21'),
+      existingItem('GF', 1, '22'),
+    ])
+
+    return (
+      <div className="mb-6">
+        <div className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Atkrintamųjų tinklelis</div>
+        <div className="overflow-x-auto">
+          <div className="min-w-[2200px] pb-4">
+            <div className="flex items-start gap-8">
+              <Column title="1/8" items={wbR16Custom} gap="space-y-5" />
+              <Column title="Ketvirtfinaliai" items={wbQFCustom} className="pt-16" gap="space-y-[149px]" />
+              <Column title="Pusfinaliai" items={wbSFCustom} className="pt-[193px]" gap="space-y-[408px]" />
+              <Column title="Finalai" items={finalsCustom} className="pt-60" gap="space-y-32" />
+              <Column title="LB R4" items={lbR4Custom} className="pt-52" gap="space-y-32" />
+              <Column title="LB R3" items={lbR3Custom} className="pt-40" gap="space-y-56" />
+              <Column title="LB R2" items={lbR2Custom} className="pt-32" gap="space-y-32" />
+              <Column title="LB R1" items={lbR1Custom} className="pt-16" gap="space-y-8" />
+            </div>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   const isEightTeamSheet = matches.some((m: any) => m.round === 'QF') && !matches.some((m: any) => m.round === 'R16')
@@ -810,9 +900,13 @@ export default function KnockoutClient({ tournamentId, config, initialMatches, q
     : matches.some((m: any) => m.round === 'QF')
       ? 'QF'
       : matches[0]?.round
+  const isCustom12Bracket = isCustom12DoubleElim(matches)
   const bracketTeamIds = new Set(
     matches
-      .filter((m: any) => ['ROUND_ROBIN', 'LUCKY_LOSER'].includes(config?.knockoutFormat) || m.round === firstBracketRound)
+      .filter((m: any) =>
+        ['ROUND_ROBIN', 'LUCKY_LOSER'].includes(config?.knockoutFormat) ||
+        (isCustom12Bracket ? ['R16', 'QF'].includes(m.round) : m.round === firstBracketRound)
+      )
       .flatMap((m: any) => [m.homeTeamId, m.awayTeamId])
       .filter(Boolean)
   )
