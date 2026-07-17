@@ -26,42 +26,89 @@ export async function generateGroupSchedule(tournamentId: string) {
 
   await prisma.match.deleteMany({ where: { tournamentId, groupId: { not: null } } })
 
-  // Sudaryti visas poras naudojant Berger lentelę
-  // Berger garantuoja, kad viename raunde kiekviena komanda žaidžia tik VIENĄ kartą
-  type Pair = { groupId: string; homeId: string; awayId: string; round: number }
-  const pairs: Pair[] = []
+  const plan = buildGroupSchedulePlan(
+    tournament.groups.map(group => ({
+      id:      group.id,
+      teamIds: group.teams.map(team => team.id),
+    })),
+    courts,
+    start,
+    matchMs,
+    breakMs,
+  )
 
-  for (const group of tournament.groups) {
-    const ids    = group.teams.map(t => t.id)
-    const rounds = bergerRounds(ids)
-    rounds.forEach((round, ri) => {
-      for (const [a, b] of round) {
-        pairs.push({ groupId: group.id, homeId: a, awayId: b, round: ri })
-      }
+  for (const item of plan) {
+    await prisma.match.create({
+      data: {
+        tournamentId,
+        groupId:     item.groupId,
+        homeTeamId:  item.homeId,
+        awayTeamId:  item.awayId,
+        court:       item.court,
+        scheduledAt: new Date(item.scheduledAt),
+        matchNumber: item.matchNumber,
+      },
     })
   }
+}
 
-  // Rikiuoti poras: pirmiausia skirtingų grupių pirmieji turai
-  // Tai leidžia lygiagrečiai žaisti skirtingų grupių rungtynes
-  pairs.sort((a, b) => a.round - b.round)
+type ScheduleGroup = { id: string; teamIds: string[] }
+type Pair = { groupId: string; homeId: string; awayId: string; round: number; order: number }
+type PlannedMatch = {
+  groupId: string
+  homeId: string
+  awayId: string
+  court: number
+  scheduledAt: number
+  matchNumber: number
+}
 
-  // Aikštelių ir komandų užimtumo sekimas (ms)
-  const courtFree: number[] = Array(courts).fill(start)
-  const teamFree:  Record<string, number> = {}
-  for (const g of tournament.groups)
-    for (const t of g.teams)
-      teamFree[t.id] = start
+export function buildGroupSchedulePlan(
+  groups: ScheduleGroup[],
+  courts: number,
+  start: number,
+  matchMs: number,
+  breakMs: number,
+): PlannedMatch[] {
+  const groupedPairs = groups.map(group => ({
+    groupId: group.id,
+    pairs:   pairsForGroup(group.id, group.teamIds),
+  }))
 
-  let matchNum = 1
+  const plan = groups.length === courts
+    ? planDedicatedGroupCourts(groupedPairs, courts, start, matchMs, breakMs)
+    : planGreedyGroupCourts(groupedPairs, courts, start, matchMs, breakMs)
+
+  return plan
+    .sort((a, b) => a.scheduledAt - b.scheduledAt || a.court - b.court)
+    .map((match, index) => ({ ...match, matchNumber: index + 1 }))
+}
+
+function pairsForGroup(groupId: string, teamIds: string[]): Pair[] {
+  const pairs: Pair[] = []
+  const rounds = bergerRounds(teamIds)
+  rounds.forEach((round, ri) => {
+    round.forEach(([a, b], order) => {
+      pairs.push({ groupId, homeId: a, awayId: b, round: ri, order })
+    })
+  })
+  return pairs
+}
+
+function planGreedyGroupCourts(
+  groups: { groupId: string; pairs: Pair[] }[],
+  courts: number,
+  start: number,
+  matchMs: number,
+  breakMs: number,
+): PlannedMatch[] {
+  const pairs = groups.flatMap(group => group.pairs).sort((a, b) => a.round - b.round || a.order - b.order)
+  const courtFree = Array(courts).fill(start)
+  const teamFree = initTeamFree(groups, start)
+  const plan: PlannedMatch[] = []
 
   for (const pair of pairs) {
-    // Anksčiausias laikas kai abi komandos laisvos
-    const teamReady = Math.max(
-      teamFree[pair.homeId] ?? start,
-      teamFree[pair.awayId] ?? start
-    )
-
-    // Rasti geriausią aikštelę: atsilaisvins anksčiausiai + abi komandos laisvos
+    const teamReady = Math.max(teamFree[pair.homeId] ?? start, teamFree[pair.awayId] ?? start)
     let bestCourt = 0
     let bestStart = Math.max(courtFree[0], teamReady)
 
@@ -70,23 +117,101 @@ export async function generateGroupSchedule(tournamentId: string) {
       if (s < bestStart) { bestStart = s; bestCourt = i }
     }
 
-    const endsAt = bestStart + matchMs
-    courtFree[bestCourt]   = endsAt + breakMs
-    teamFree[pair.homeId]  = endsAt + breakMs
-    teamFree[pair.awayId]  = endsAt + breakMs
-
-    await prisma.match.create({
-      data: {
-        tournamentId,
-        groupId:    pair.groupId,
-        homeTeamId: pair.homeId,
-        awayTeamId: pair.awayId,
-        court:      bestCourt + 1,
-        scheduledAt: new Date(bestStart),
-        matchNumber: matchNum++,
-      },
-    })
+    reserveMatch(pair, bestCourt, bestStart, courtFree, teamFree, plan, matchMs, breakMs)
   }
+
+  return plan
+}
+
+function planDedicatedGroupCourts(
+  groups: { groupId: string; pairs: Pair[] }[],
+  courts: number,
+  start: number,
+  matchMs: number,
+  breakMs: number,
+): PlannedMatch[] {
+  const queues = groups.map(group => ({ ...group, pairs: [...group.pairs] }))
+  const courtFree = Array(courts).fill(start)
+  const teamFree = initTeamFree(groups, start)
+  const plan: PlannedMatch[] = []
+
+  while (queues.some(group => group.pairs.length > 0)) {
+    let best: { groupIndex: number; courtIndex: number; startTime: number } | null = null
+
+    for (let groupIndex = 0; groupIndex < queues.length; groupIndex++) {
+      const group = queues[groupIndex]
+      const pair = group.pairs[0]
+      if (!pair) continue
+
+      for (const courtIndex of allowedCourtsForGroup(queues, groupIndex)) {
+        const teamReady = Math.max(teamFree[pair.homeId] ?? start, teamFree[pair.awayId] ?? start)
+        const startTime = Math.max(courtFree[courtIndex], teamReady)
+
+        if (
+          !best ||
+          startTime < best.startTime ||
+          (startTime === best.startTime && courtIndex === groupIndex && best.courtIndex !== best.groupIndex) ||
+          (startTime === best.startTime && courtIndex < best.courtIndex)
+        ) {
+          best = { groupIndex, courtIndex, startTime }
+        }
+      }
+    }
+
+    if (!best) break
+
+    const pair = queues[best.groupIndex].pairs.shift()
+    if (!pair) continue
+    reserveMatch(pair, best.courtIndex, best.startTime, courtFree, teamFree, plan, matchMs, breakMs)
+  }
+
+  return plan
+}
+
+function allowedCourtsForGroup(
+  groups: { groupId: string; pairs: Pair[] }[],
+  groupIndex: number,
+): number[] {
+  const courts = [groupIndex]
+  groups.forEach((group, index) => {
+    if (index !== groupIndex && group.pairs.length === 0) courts.push(index)
+  })
+  return courts
+}
+
+function initTeamFree(groups: { groupId: string; pairs: Pair[] }[], start: number) {
+  const teamFree: Record<string, number> = {}
+  for (const group of groups) {
+    for (const pair of group.pairs) {
+      teamFree[pair.homeId] = start
+      teamFree[pair.awayId] = start
+    }
+  }
+  return teamFree
+}
+
+function reserveMatch(
+  pair: Pair,
+  courtIndex: number,
+  scheduledAt: number,
+  courtFree: number[],
+  teamFree: Record<string, number>,
+  plan: PlannedMatch[],
+  matchMs: number,
+  breakMs: number,
+) {
+  const endsAt = scheduledAt + matchMs
+  courtFree[courtIndex] = endsAt + breakMs
+  teamFree[pair.homeId] = endsAt + breakMs
+  teamFree[pair.awayId] = endsAt + breakMs
+  plan.push({
+    groupId: pair.groupId,
+    homeId: pair.homeId,
+    awayId: pair.awayId,
+    court: courtIndex + 1,
+    scheduledAt,
+    matchNumber: 0,
+  })
 }
 
 // ─── Berger lentelė ──────────────────────────────────────────
