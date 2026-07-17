@@ -94,6 +94,16 @@ export default function ScheduleClient({ tournamentId, config, initialMatches, s
               {loading ? 'Generuojama...' : 'Generuoti tvarkaraštį'}
             </button>
           </form>
+          {matches.length > 0 && (
+            <a
+              href={`/tournament/${tournamentId}/schedule/print`}
+              target="_blank"
+              rel="noreferrer"
+              className="px-4 py-2 bg-white border border-gray-200 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50"
+            >
+              Spausdinti pagal aikšteles
+            </a>
+          )}
         </div>
       </div>
 
