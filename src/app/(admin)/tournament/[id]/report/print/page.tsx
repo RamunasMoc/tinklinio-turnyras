@@ -227,10 +227,11 @@ export default async function TournamentReportPrintPage({ params }: { params: { 
       <style>{`
         @page { size: A4 portrait; margin: 10mm; }
         @media print {
+          html, body { width: auto !important; height: auto !important; background: white !important; }
           .no-print { display: none !important; }
           .report-section { break-inside: avoid; }
           .page-break { break-before: page; }
-          body { background: white !important; }
+          .report-print-root { display: block !important; min-height: 0 !important; background: white !important; }
         }
       `}</style>
 
@@ -241,7 +242,7 @@ export default async function TournamentReportPrintPage({ params }: { params: { 
         <PrintButton>Išsaugoti / spausdinti PDF</PrintButton>
       </div>
 
-      <div className="mx-auto max-w-5xl space-y-6 px-6 pb-10 print:max-w-none print:space-y-4 print:p-0">
+      <div className="report-print-root mx-auto max-w-5xl space-y-6 px-6 pb-10 print:max-w-none print:space-y-4 print:p-0">
         <header className="border-b border-gray-200 pb-5">
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-gray-400">Turnyro ataskaita</p>
           <h1 className="mt-2 text-3xl font-bold text-gray-950">{tournament.name}</h1>

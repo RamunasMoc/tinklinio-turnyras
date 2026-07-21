@@ -94,7 +94,7 @@ export default function AdminNav({ user }: { user: { name?: string; email?: stri
 
   return (
     <>
-      <header className="sticky top-0 z-30 flex h-14 items-center justify-between border-b border-gray-200 bg-white px-4 md:hidden">
+      <header className="sticky top-0 z-30 flex h-14 items-center justify-between border-b border-gray-200 bg-white px-4 md:hidden print:hidden">
         <Link href="/dashboard" className="flex min-w-0 items-center gap-2">
           <span className="text-lg" aria-hidden="true">🏐</span>
           <span className="truncate text-sm font-semibold text-gray-900">Turnyro sistema</span>
@@ -110,13 +110,13 @@ export default function AdminNav({ user }: { user: { name?: string; email?: stri
         </button>
       </header>
 
-      <aside className="hidden min-h-screen w-56 shrink-0 flex-col border-r border-gray-200 bg-white md:flex">
+      <aside className="hidden min-h-screen w-56 shrink-0 flex-col border-r border-gray-200 bg-white md:flex print:hidden">
         <Brand />
         {navList()}
       </aside>
 
       {open && (
-        <div className="fixed inset-0 z-50 md:hidden" role="dialog" aria-modal="true" aria-label="Administratoriaus meniu">
+        <div className="fixed inset-0 z-50 md:hidden print:hidden" role="dialog" aria-modal="true" aria-label="Administratoriaus meniu">
           <button
             type="button"
             className="absolute inset-0 bg-gray-950/40"
