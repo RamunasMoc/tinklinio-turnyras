@@ -90,3 +90,65 @@ describe('isCustom12DoubleElimMatches', () => {
     }))).toBe(false)
   })
 })
+
+describe('advanceWinner', () => {
+  beforeEach(() => {
+    jest.resetModules()
+    jest.clearAllMocks()
+  })
+
+  it('puts each single-elimination semifinal loser into a fixed third-place slot', async () => {
+    const update = jest.fn()
+    const findUnique = jest
+      .fn()
+      .mockResolvedValueOnce({
+        id: 'sf-1',
+        tournamentId: 'tournament',
+        round: 'SF',
+        matchNumber: 1,
+        homeTeamId: 'team-1',
+        awayTeamId: 'team-4',
+        winnerId: 'team-1',
+        tournament: { config: { knockoutFormat: 'SINGLE_ELIMINATION' } },
+      })
+      .mockResolvedValueOnce({
+        id: 'sf-2',
+        tournamentId: 'tournament',
+        round: 'SF',
+        matchNumber: 2,
+        homeTeamId: 'team-3',
+        awayTeamId: 'team-2',
+        winnerId: 'team-3',
+        tournament: { config: { knockoutFormat: 'SINGLE_ELIMINATION' } },
+      })
+
+    jest.doMock('@/lib/prisma', () => ({
+      prisma: {
+        match: {
+          findUnique,
+          findFirst: jest.fn(({ where }) => {
+            if (where.round === 'F') return Promise.resolve({ id: 'final', round: 'F', matchNumber: 1 })
+            if (where.round === '3rd') return Promise.resolve({ id: 'third', round: '3rd', matchNumber: 1 })
+            return Promise.resolve(null)
+          }),
+          count: jest.fn(({ where }) => Promise.resolve(where.round === 'SF' ? 2 : 1)),
+          update,
+          findMany: jest.fn().mockResolvedValue([]),
+        },
+      },
+    }))
+
+    const { advanceWinner } = await import('@/lib/bracket')
+    await advanceWinner('sf-1')
+    await advanceWinner('sf-2')
+
+    expect(update).toHaveBeenCalledWith({
+      where: { id: 'third' },
+      data: { homeTeamId: 'team-4' },
+    })
+    expect(update).toHaveBeenCalledWith({
+      where: { id: 'third' },
+      data: { awayTeamId: 'team-2' },
+    })
+  })
+})

@@ -1741,7 +1741,7 @@ export async function advanceWinner(matchId: string) {
         where: { tournamentId: match.tournamentId, round: '3rd' },
       })
       if (thirdMatch) {
-        const thirdSlot = !thirdMatch.homeTeamId ? 'homeTeamId' : 'awayTeamId'
+        const thirdSlot = (match.matchNumber ?? 1) === 1 ? 'homeTeamId' : 'awayTeamId'
         await prisma.match.update({
           where: { id: thirdMatch.id },
           data:  { [thirdSlot]: loserId },
