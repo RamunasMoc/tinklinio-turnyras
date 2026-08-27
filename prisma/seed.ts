@@ -13,12 +13,13 @@ async function main() {
   console.log('Sėjame duomenis...')
 
   // ── Vartotojai ───────────────────────────────────────────
-  const adminHash = await hash('admin123', 12)
+  const adminPassword = process.env.SEED_ADMIN_PASSWORD ?? 'admin123'
+  const adminHash = await hash(adminPassword, 12)
   const refHash   = await hash('referee123', 12)
 
   const admin = await prisma.user.upsert({
     where:  { email: 'admin@turnyras.lt' },
-    update: {},
+    update: { passwordHash: adminHash },
     create: { email: 'admin@turnyras.lt', name: 'Administratorius',
                passwordHash: adminHash, role: 'ADMIN' },
   })
@@ -130,7 +131,7 @@ async function main() {
   console.log(`✓ Komandos: ${TEAMS.length} įkelta`)
 
   console.log('\n✅ Sėjimas baigtas!')
-  console.log('   Admin:   admin@turnyras.lt / admin123')
+  console.log('   Admin:   admin@turnyras.lt / <SEED_ADMIN_PASSWORD arba admin123>')
   console.log('   Teisėjas: teisejas@turnyras.lt / referee123')
 }
 
